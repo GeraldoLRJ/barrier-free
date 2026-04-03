@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Barrier Free - DOM Capture",
+  "version": "1.0.0",
+  "description": "Extensão para capturar o DOM da página atual e enviar para análise de acessibilidade.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
