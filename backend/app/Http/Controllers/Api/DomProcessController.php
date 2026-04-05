@@ -16,7 +16,7 @@ class DomProcessController extends Controller
     {
         // Pega HTML validado do payload
         $validated = $request->validated();
-        
+
         // Passa os dados para a Action responsável por processar a regra de negócio
         $result = $processDomAction->execute($validated['html_content'], $validated['url'] ?? null);
 
