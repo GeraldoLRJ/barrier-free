@@ -48,8 +48,7 @@ class SafeBrowsingService
 
         if ($response->failed()) {
             Log::error('Google Safe Browsing API falhou', ['status' => $response->status(), 'response' => $response->body()]);
-            // If the API call fails, we might want to default to true to not block legitimate traffic, or false to be strict.
-            // Let's default to true for resilience, but in a highly secure environment this might be false.
+            //Criar falha posteriormente
             return true;
         }
 

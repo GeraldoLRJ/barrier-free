@@ -14,6 +14,7 @@ class StoreDomRequest extends FormRequest
 
     public function rules(): array
     {
+        $teste = 0;
         return [
             'html_content' => ['required', 'string'],
             'url'          => ['nullable', 'url', 'string', new \App\Rules\SafeUrl()],
