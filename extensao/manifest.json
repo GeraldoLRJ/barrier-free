@@ -5,11 +5,13 @@
   "description": "Extensão para capturar o DOM da página atual e enviar para análise de acessibilidade.",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "host_permissions": [
     "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1/*",
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",

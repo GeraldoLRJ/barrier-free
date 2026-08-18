@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Barrier Free - Comando de Voz</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h2 {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: #e0e0e0;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .mic-container {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      margin-bottom: 24px;
+    }
+
+    .mic-btn {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #4CAF50, #2E7D32);
+      color: white;
+      font-size: 36px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+      position: relative;
+      z-index: 1;
+    }
+
+    .mic-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(76, 175, 80, 0.4);
+    }
+
+    .mic-btn.listening {
+      background: linear-gradient(135deg, #f44336, #c62828);
+      animation: pulse-btn 1.5s ease-in-out infinite;
+    }
+
+    .pulse-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      border: 3px solid rgba(244, 67, 54, 0.5);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .listening .pulse-ring {
+      animation: pulse-ring 1.5s ease-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+      100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+    }
+
+    @keyframes pulse-btn {
+      0%, 100% { box-shadow: 0 0 10px rgba(244, 67, 54, 0.3); }
+      50% { box-shadow: 0 0 25px rgba(244, 67, 54, 0.6); }
+    }
+
+    #status {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      min-height: 20px;
+    }
+
+    #status.ready { color: #4CAF50; }
+    #status.listening { color: #f44336; }
+    #status.processing { color: #FF9800; }
+    #status.error { color: #f44336; }
+
+    #transcript {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 12px 16px;
+      width: 100%;
+      max-width: 380px;
+      min-height: 60px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 13px;
+      color: #ccc;
+      line-height: 1.5;
+    }
+
+    #transcript:empty::before {
+      content: 'Diga "enviar" ou "analisar" para processar a página...';
+      color: #666;
+      font-style: italic;
+    }
+
+    .commands-hint {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+    }
+
+    .commands-hint span {
+      background: rgba(76, 175, 80, 0.15);
+      color: #81C784;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin: 0 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>🎙️ Comando de Voz</h2>
+  <p class="subtitle">Barrier Free — Reconhecimento de Voz</p>
+
+  <div class="mic-container" id="micContainer">
+    <button class="mic-btn" id="micBtn">🎤</button>
+    <div class="pulse-ring"></div>
+  </div>
+
+  <div id="status" class="ready">Clique para iniciar</div>
+  <div id="transcript"></div>
+
+  <div class="commands-hint">
+    Comandos: <span>resumir</span> <span>explicar</span> <span>orientar</span> <span>analisar</span>
+  </div>
+
+  <script src="voice.js"></script>
+</body>
+</html>

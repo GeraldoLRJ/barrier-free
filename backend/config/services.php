@@ -39,4 +39,9 @@ return [
         'key' => env('GOOGLE_SAFE_BROWSING_API_KEY'),
     ],
 
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+    ],
+
 ];

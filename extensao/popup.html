@@ -11,7 +11,6 @@
       text-align: center;
     }
     button {
-      background-color: #4CAF50;
       color: white;
       border: none;
       padding: 10px 15px;
@@ -19,9 +18,25 @@
       cursor: pointer;
       border-radius: 4px;
       width: 100%;
+      margin-bottom: 8px;
     }
-    button:hover {
+    #processBtn {
+      background-color: #4CAF50;
+    }
+    #processBtn:hover {
       background-color: #45a049;
+    }
+    #voiceBtn {
+      background-color: #2196F3;
+    }
+    #voiceBtn:hover {
+      background-color: #1976D2;
+    }
+    #voiceBtn.active {
+      background-color: #f44336;
+    }
+    #voiceBtn.active:hover {
+      background-color: #d32f2f;
     }
     #status {
       margin-top: 10px;
@@ -33,6 +48,7 @@
 <body>
   <h3>Acessibilidade DOM</h3>
   <button id="processBtn">Processar Página Atual</button>
+  <button id="voiceBtn">🎤 Ativar Voz</button>
   <div id="status"></div>
   
   <script src="popup.js"></script>

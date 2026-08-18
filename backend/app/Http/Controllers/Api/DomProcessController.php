@@ -14,11 +14,15 @@ class DomProcessController extends Controller
      */
     public function __invoke(StoreDomRequest $request, ProcessDomAction $processDomAction): JsonResponse
     {
-        // Pega HTML validado do payload
+        // Pega dados validados do payload
         $validated = $request->validated();
 
         // Passa os dados para a Action responsável por processar a regra de negócio
-        $result = $processDomAction->execute($validated['html_content'], $validated['url'] ?? null);
+        $result = $processDomAction->execute(
+            $validated['html_content'],
+            $validated['url'] ?? null,
+            $validated['command'] ?? 'analisar'
+        );
 
         return response()->json([
             'success' => true,
