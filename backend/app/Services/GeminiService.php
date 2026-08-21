@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\ConnectionException;
 
 class GeminiService
 {
@@ -53,7 +54,7 @@ PROMPT;
      * @param string|null $url URL da página analisada
      * @return string Resposta textual do Gemini
      */
-    public function analyze(string $htmlContent, string $command, ?string $url = null): string
+    public function analyze(string $htmlContent, string $command, ?string $url = null, ?string $userPrompt = null): string
     {
         $apiKey = config('services.gemini.key');
         $model = config('services.gemini.model', 'gemini-2.0-flash');
@@ -66,33 +67,47 @@ PROMPT;
         // Sanitizar o DOM antes de enviar
         $sanitizedHtml = $this->sanitizer->sanitize($htmlContent);
 
-        // Montar o prompt do usuário
-        $commandPrompt = $this->commandPrompts[$command] ?? $this->commandPrompts['resumir'];
+        // Montar o prompt
+        $baseCommandPrompt = $this->commandPrompts[$command] ?? $this->commandPrompts['resumir'];
+        
         $urlContext = $url ? "URL da página: {$url}\n\n" : '';
+        
+        // Incorpora a instrução livre do usuário se ele tiver falado mais coisas
+        $userInstruction = '';
+        if ($userPrompt && trim($userPrompt) !== '') {
+            $userInstruction = "Instrução específica do usuário (atenda a este pedido baseando-se no conteúdo): \"{$userPrompt}\"\n\n";
+        }
 
-        $userPrompt = "{$commandPrompt}\n\n{$urlContext}Conteúdo da página:\n{$sanitizedHtml}";
+        $finalPrompt = "{$baseCommandPrompt}\n\n{$userInstruction}{$urlContext}Conteúdo da página:\n{$sanitizedHtml}";
 
         // Chamar a API do Gemini
         $endpoint = "{$this->baseUrl}/{$model}:generateContent?key={$apiKey}";
 
-        $response = Http::timeout(30)->post($endpoint, [
-            'system_instruction' => [
-                'parts' => [
-                    ['text' => $this->systemInstruction],
-                ],
-            ],
-            'contents' => [
-                [
+        try {
+            $response = Http::timeout(120)->post($endpoint, [
+                'system_instruction' => [
                     'parts' => [
-                        ['text' => $userPrompt],
+                        ['text' => $this->systemInstruction],
                     ],
                 ],
-            ],
-            'generationConfig' => [
-                'temperature' => 0.4,
-                'maxOutputTokens' => 1024,
-            ],
-        ]);
+                'contents' => [
+                    [
+                        'parts' => [
+                            ['text' => $finalPrompt],
+                        ],
+                    ],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.4,
+                    'maxOutputTokens' => 4096,
+                ],
+            ]);
+        } catch (ConnectionException $e) {
+            Log::error('Gemini API: timeout de conexão', [
+                'error' => $e->getMessage(),
+            ]);
+            return 'A análise demorou muito e foi cancelada. A página pode ser muito grande. Tente novamente.';
+        }
 
         if ($response->failed()) {
             Log::error('Gemini API falhou', [
@@ -104,10 +119,25 @@ PROMPT;
 
         $data = $response->json();
 
-        // Extrair o texto da resposta
-        $text = $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+        // Verificar e logar o motivo de parada do modelo
+        $finishReason = $data['candidates'][0]['finishReason'] ?? 'UNKNOWN';
+        Log::info('Gemini finishReason: ' . $finishReason);
 
-        if (!$text) {
+        if ($finishReason === 'SAFETY') {
+            Log::warning('Gemini bloqueou a resposta por filtro de segurança', ['response' => $data]);
+            return 'Não foi possível analisar esta página pois o conteúdo foi bloqueado pelo filtro de segurança.';
+        }
+
+        // Extrair o texto da resposta — concatenar todas as parts
+        $parts = $data['candidates'][0]['content']['parts'] ?? [];
+        $text = '';
+        foreach ($parts as $part) {
+            if (isset($part['text'])) {
+                $text .= $part['text'];
+            }
+        }
+
+        if (empty($text)) {
             Log::warning('Gemini retornou resposta vazia', ['response' => $data]);
             return 'Não foi possível gerar uma análise para esta página.';
         }

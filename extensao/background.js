@@ -22,7 +22,7 @@ async function captureCurrentTabDom(command = 'analisar') {
             function: () => {
                 return {
                     url: window.location.href,
-                    html_content: document.documentElement.outerHTML
+                    html_content: document.body.innerHTML
                 };
             }
         }, (injectionResults) => {
@@ -36,9 +36,15 @@ async function captureCurrentTabDom(command = 'analisar') {
                 return;
             }
             if (injectionResults && injectionResults[0] && injectionResults[0].result) {
-                // Adicionar o comando ao payload antes de enviar
+                // Adicionar o comando e o prompt do usuário ao payload antes de enviar
                 const data = injectionResults[0].result;
                 data.command = command;
+                
+                // Se foi passado um texto completo falado pelo usuário, envia junto
+                if (arguments.length > 1 && arguments[1]) {
+                    data.user_prompt = arguments[1];
+                }
+                
                 handleSendDomRequest({ data });
             }
         });
@@ -83,6 +89,10 @@ function handleSendDomRequest(request) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "sendDom") {
     handleSendDomRequest(request);
+  }
+  
+  if (request.action === "summarizeDom") {
+    captureCurrentTabDom('resumir');
   }
   
   if (request.action === "toggleVoice") {

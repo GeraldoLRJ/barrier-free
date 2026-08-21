@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreDomRequest;
 use App\Actions\ProcessDomAction;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class DomProcessController extends Controller
 {
@@ -17,11 +18,16 @@ class DomProcessController extends Controller
         // Pega dados validados do payload
         $validated = $request->validated();
 
+        Log::info('URL: ' . $validated['url']);
+        Log::info('Comando: ' . $validated['command']);
+        Log::info('Conteúdo HTML: ' . $validated['html_content']);
+
         // Passa os dados para a Action responsável por processar a regra de negócio
         $result = $processDomAction->execute(
             $validated['html_content'],
             $validated['url'] ?? null,
-            $validated['command'] ?? 'analisar'
+            $validated['command'] ?? 'analisar',
+            $validated['user_prompt'] ?? null
         );
 
         return response()->json([
