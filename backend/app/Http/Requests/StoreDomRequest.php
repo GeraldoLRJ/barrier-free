@@ -17,7 +17,7 @@ class StoreDomRequest extends FormRequest
         return [
             'html_content' => ['required', 'string'],
             'url'          => ['nullable', 'url', 'string', new \App\Rules\SafeUrl()],
-            'command'      => ['nullable', 'string', 'in:analisar,resumir,explicar,orientar'],
+            'command'      => ['nullable', 'string', 'in:resumir,orientar,buscar'],
             'user_prompt'  => ['nullable', 'string', 'max:255'],
         ];
     }

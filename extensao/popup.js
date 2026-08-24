@@ -1,22 +1,3 @@
-document.getElementById('processBtn').addEventListener('click', async () => {
-  const statusDiv = document.getElementById('status');
-  statusDiv.textContent = "Processando...";
-
-  // Pega a tab ativa
-  let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-  // Executa o script de injeção
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['content.js']
-  }, (results) => {
-    if (chrome.runtime.lastError) {
-      statusDiv.textContent = "Erro: " + chrome.runtime.lastError.message;
-      return;
-    }
-  });
-});
-
 // --- Controle do Analisador IA ---
 document.getElementById('aiAnalyzeBtn').addEventListener('click', () => {
   const statusDiv = document.getElementById('status');

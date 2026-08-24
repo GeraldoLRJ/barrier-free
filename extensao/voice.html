@@ -69,6 +69,18 @@
       animation: pulse-btn 1.5s ease-in-out infinite;
     }
 
+    .mic-btn.processing {
+      background: linear-gradient(135deg, #FF9800, #E65100);
+      animation: pulse-processing 1.2s ease-in-out infinite;
+      cursor: not-allowed;
+      opacity: 0.85;
+    }
+
+    @keyframes pulse-processing {
+      0%, 100% { box-shadow: 0 0 10px rgba(255, 152, 0, 0.3); transform: scale(1); }
+      50% { box-shadow: 0 0 25px rgba(255, 152, 0, 0.6); transform: scale(1.03); }
+    }
+
     .pulse-ring {
       position: absolute;
       top: 50%;
@@ -159,7 +171,7 @@
   <div id="transcript"></div>
 
   <div class="commands-hint">
-    Comandos: <span>resumir</span> <span>explicar</span> <span>orientar</span> <span>analisar</span>
+    Comandos: <span>resumir</span> <span>orientar</span> <span>buscar</span>
   </div>
 
   <script src="voice.js"></script>

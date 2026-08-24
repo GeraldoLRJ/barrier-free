@@ -6,7 +6,8 @@
   "permissions": [
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "http://localhost/*",
@@ -23,5 +24,13 @@
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "commands": {
+    "toggle-voice": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+U"
+      },
+      "description": "Ativar ou desativar o comando de voz Barrier Free"
+    }
   }
 }

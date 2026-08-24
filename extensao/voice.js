@@ -17,6 +17,53 @@ if (!SpeechRecognition) {
   recognition.continuous = true;
 
   let isListening = false;
+  let isProcessing = false; // Trava escuta enquanto aguarda resposta da API
+
+  // --- Efeitos sonoros via Web Audio API ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Som de envio: bip ascendente curto ("ping" para cima)
+  function playSendSound() {
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.linearRampToValueAtTime(880, now + 0.12);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+
+  // Som de recebimento: acorde descendente suave ("notificação")
+  function playReceiveSound() {
+    const now = audioCtx.currentTime;
+    const notes = [784, 659, 523]; // Sol5 → Mi5 → Dó5
+    const noteDuration = 0.12;
+
+    notes.forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * noteDuration);
+
+      gain.gain.setValueAtTime(0, now + i * noteDuration);
+      gain.gain.linearRampToValueAtTime(0.22, now + i * noteDuration + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * noteDuration + noteDuration + 0.08);
+
+      osc.start(now + i * noteDuration);
+      osc.stop(now + i * noteDuration + noteDuration + 0.1);
+    });
+  }
 
   function startListening() {
     try {
@@ -47,7 +94,22 @@ if (!SpeechRecognition) {
     }
   });
 
+  // Lista de palavras-chave que disparam comandos reais
+  const COMMAND_KEYWORDS = [
+    'resumir', 'resumo',
+    'orientar', 'ajudar', 'orientação', 'ajuda',
+    'buscar', 'pesquisar', 'procurar',
+    'abrir', 'navegar',
+  ];
+
+  function isValidCommand(text) {
+    return COMMAND_KEYWORDS.some(keyword => text.includes(keyword));
+  }
+
   recognition.onresult = (event) => {
+    // Ignorar qualquer fala se estiver processando um comando anterior
+    if (isProcessing) return;
+
     // Pegar o último resultado reconhecido
     const lastResult = event.results[event.results.length - 1];
 
@@ -60,22 +122,29 @@ if (!SpeechRecognition) {
       transcriptDiv.appendChild(entry);
       transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
 
+      // Verificar se é um comando válido
+      if (!isValidCommand(command)) {
+        // Não é um comando reconhecido — ignorar e continuar ouvindo
+        return;
+      }
+
+      // Comando válido — pausar reconhecimento até receber resposta
+      isProcessing = true;
+      recognition.stop();
+
       statusDiv.textContent = 'Processando comando...';
       statusDiv.className = 'processing';
+      micBtn.classList.remove('listening');
+      micBtn.classList.add('processing');
+
+      // 🔊 Efeito sonoro de envio
+      playSendSound();
 
       // Enviar o comando para o background.js
       chrome.runtime.sendMessage({
         action: 'voiceCommand',
         command: command
       });
-
-      // Voltar ao estado de escuta após um breve delay
-      setTimeout(() => {
-        if (isListening) {
-          statusDiv.textContent = 'Ouvindo...';
-          statusDiv.className = 'listening';
-        }
-      }, 1000);
     }
   };
 
@@ -98,6 +167,9 @@ if (!SpeechRecognition) {
   };
 
   recognition.onend = () => {
+    // Não reiniciar se estiver aguardando resposta da API
+    if (isProcessing) return;
+
     // Reiniciar automaticamente se ainda estiver no modo de escuta
     if (isListening) {
       try {
@@ -110,11 +182,7 @@ if (!SpeechRecognition) {
 
   // --- Text-to-Speech (TTS) para respostas da IA ---
   function speakResponse(text) {
-    // Pausar reconhecimento enquanto fala para evitar capturar a própria voz
-    const wasListening = isListening;
-    if (wasListening) {
-      recognition.stop();
-    }
+    // Reconhecimento já está parado (isProcessing === true)
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
@@ -122,26 +190,34 @@ if (!SpeechRecognition) {
     utterance.pitch = 1;
 
     utterance.onend = () => {
-      // Retomar escuta após terminar de falar
-      if (wasListening) {
-        setTimeout(() => {
-          startListening();
-        }, 500);
-      }
+      // TTS terminou — desbloquear e retomar escuta
+      setTimeout(() => {
+        resumeListeningAfterProcessing();
+      }, 500);
     };
 
     utterance.onerror = () => {
-      if (wasListening) {
-        startListening();
-      }
+      resumeListeningAfterProcessing();
     };
 
     window.speechSynthesis.speak(utterance);
   }
 
+  // Retomar escuta após processamento completo
+  function resumeListeningAfterProcessing() {
+    isProcessing = false;
+    micBtn.classList.remove('processing');
+    if (isListening) {
+      startListening();
+    }
+  }
+
   // Escutar resultados do processamento vindos do background.js
   chrome.runtime.onMessage.addListener((request) => {
     if (request.action === 'processResult') {
+      // 🔊 Efeito sonoro de resposta recebida
+      playReceiveSound();
+
       const entry = document.createElement('div');
 
       if (request.success) {
@@ -152,9 +228,26 @@ if (!SpeechRecognition) {
           entry.textContent = request.ai_response;
           statusDiv.textContent = 'Lendo resposta...';
           statusDiv.className = 'processing';
-          speakResponse(request.ai_response);
+
+          let spokenText = request.ai_response;
+          if (request.search_sources && request.search_sources.length > 0) {
+            const count = request.search_sources.length;
+            const plural = count > 1 ? 's' : '';
+            spokenText += `. Encontrei ${count} fonte${plural} relacionada${plural}. Diga "abrir" para navegar até a primeira fonte.`;
+
+            // Exibir fontes no transcript para referência
+            const sourcesEntry = document.createElement('div');
+            sourcesEntry.style.color = '#64B5F6';
+            sourcesEntry.textContent = '🔗 Fontes: ' + request.search_sources.map(s => s.title).join(', ');
+            transcriptDiv.appendChild(sourcesEntry);
+          }
+
+          // speakResponse já cuida de retomar a escuta ao terminar de falar
+          speakResponse(spokenText);
         } else {
           entry.textContent = `✅ ${request.message}`;
+          // Sem TTS — retomar escuta imediatamente
+          resumeListeningAfterProcessing();
         }
       } else {
         entry.style.color = '#ef5350';

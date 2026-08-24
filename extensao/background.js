@@ -1,6 +1,7 @@
 let voiceWindowId = null;
+let lastSearchSources = null;
 
-async function captureCurrentTabDom(command = 'analisar') {
+async function captureCurrentTabDom(command = 'analisar', userPrompt = null) {
     // FIX: Pegar a aba ativa da janela normal do navegador, ignorando o popup de voz
     let [tab] = await chrome.tabs.query({ active: true, windowType: 'normal' });
     
@@ -41,8 +42,8 @@ async function captureCurrentTabDom(command = 'analisar') {
                 data.command = command;
                 
                 // Se foi passado um texto completo falado pelo usuário, envia junto
-                if (arguments.length > 1 && arguments[1]) {
-                    data.user_prompt = arguments[1];
+                if (userPrompt) {
+                    data.user_prompt = userPrompt;
                 }
                 
                 handleSendDomRequest({ data });
@@ -70,11 +71,18 @@ function handleSendDomRequest(request) {
     .then(data => {
       // Se houver resposta da IA, enviar ela junto
       const aiResponse = data.data?.ai_response || null;
+      const searchSources = data.data?.search_sources || null;
+
+      if (searchSources && searchSources.length > 0) {
+        lastSearchSources = searchSources;
+      }
+
       chrome.runtime.sendMessage({
         action: "processResult",
         success: true,
         message: data.message || "Processado com sucesso.",
-        ai_response: aiResponse
+        ai_response: aiResponse,
+        search_sources: searchSources
       });
     })
     .catch(error => {
@@ -84,6 +92,31 @@ function handleSendDomRequest(request) {
         message: error.message || "Erro de rede"
       });
     });
+}
+
+// --- Função reutilizável para abrir/fechar a janela de voz ---
+function openVoiceWindow() {
+    if (voiceWindowId !== null) {
+        chrome.windows.update(voiceWindowId, { focused: true });
+    } else {
+        chrome.windows.create({
+            url: 'voice.html',
+            type: 'popup',
+            width: 450,
+            height: 400
+        }, (win) => {
+            voiceWindowId = win.id;
+            chrome.storage.local.set({ isVoiceEnabled: true });
+        });
+    }
+}
+
+function closeVoiceWindow() {
+    if (voiceWindowId !== null) {
+        chrome.windows.remove(voiceWindowId);
+        voiceWindowId = null;
+        chrome.storage.local.set({ isVoiceEnabled: false });
+    }
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -97,24 +130,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === "toggleVoice") {
       if (request.enabled) {
-          if (voiceWindowId !== null) {
-              chrome.windows.update(voiceWindowId, { focused: true });
-          } else {
-              chrome.windows.create({
-                  url: 'voice.html',
-                  type: 'popup',
-                  width: 450,
-                  height: 400
-              }, (win) => {
-                  voiceWindowId = win.id;
-              });
-          }
+          openVoiceWindow();
       } else {
-          // Fechar a janela se for desativado
-          if (voiceWindowId !== null) {
-              chrome.windows.remove(voiceWindowId);
-              voiceWindowId = null;
-          }
+          closeVoiceWindow();
       }
   }
 
@@ -123,15 +141,35 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const cmd = request.command;
 
       if (cmd.includes("resumir") || cmd.includes("resumo")) {
-          captureCurrentTabDom('resumir');
-      } else if (cmd.includes("explicar") || cmd.includes("explicação")) {
-          captureCurrentTabDom('explicar');
+          captureCurrentTabDom('resumir', cmd);
       } else if (cmd.includes("orientar") || cmd.includes("ajudar") || cmd.includes("orientação") || cmd.includes("ajuda")) {
-          captureCurrentTabDom('orientar');
-      } else if (cmd.includes("enviar") || cmd.includes("analisar")) {
-          captureCurrentTabDom('analisar');
+          captureCurrentTabDom('orientar', cmd);
+      } else if (cmd.includes("buscar") || cmd.includes("pesquisar") || cmd.includes("procurar")) {
+          captureCurrentTabDom('buscar', cmd);
+      } else if ((cmd.includes("abrir") || cmd.includes("navegar")) && lastSearchSources && lastSearchSources.length > 0) {
+          const source = lastSearchSources[0];
+          chrome.tabs.create({ url: source.url });
+          lastSearchSources = null;
+          chrome.runtime.sendMessage({
+              action: "processResult",
+              success: true,
+              message: "Navegando para: " + source.title,
+              ai_response: "Abrindo a página: " + source.title
+          });
       }
   }
+});
+
+// --- Atalho de teclado (Alt+Shift+B) para ativar/desativar voz ---
+chrome.commands.onCommand.addListener((command) => {
+    if (command === 'toggle-voice') {
+        if (voiceWindowId !== null) {
+            closeVoiceWindow();
+            chrome.runtime.sendMessage({ action: "voiceStatus", status: "ended" });
+        } else {
+            openVoiceWindow();
+        }
+    }
 });
 
 chrome.windows.onRemoved.addListener((windowId) => {

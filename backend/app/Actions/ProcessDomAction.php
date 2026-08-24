@@ -20,28 +20,25 @@ class ProcessDomAction
      */
     public function execute(string $htmlContent, ?string $url = null, string $command = 'analisar', ?string $userPrompt = null): array
     {
-        $aiCommands = ['resumir', 'explicar', 'orientar'];
+        $aiCommands = ['resumir', 'orientar', 'buscar'];
 
         if (in_array($command, $aiCommands)) {
-            $aiResponse = $this->geminiService->analyze($htmlContent, $command, $url, $userPrompt);
+            $aiResult = $this->geminiService->analyze($htmlContent, $command, $url, $userPrompt);
 
             return [
-                'analyzed_url' => $url ?? 'unknown',
-                'command'      => $command,
-                'status'       => 'processed',
-                'ai_response'  => $aiResponse,
+                'analyzed_url'   => $url ?? 'unknown',
+                'command'        => $command,
+                'status'         => 'processed',
+                'ai_response'    => $aiResult['text'],
+                'search_sources' => $aiResult['search_sources'] ?? null,
             ];
         }
 
-        // Processamento padrão (sem IA) — comportamento original
-        $length = mb_strlen($htmlContent);
-
+        // Comando não reconhecido — retornar erro
         return [
             'analyzed_url' => $url ?? 'unknown',
             'command'      => $command,
-            'html_length'  => $length,
-            'status'       => 'processed',
-            'issues_found' => 0,
+            'status'       => 'unknown_command',
         ];
     }
 }

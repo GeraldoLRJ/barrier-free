@@ -34,9 +34,9 @@ PROMPT;
     protected array $commandPrompts = [
         'resumir' => 'Faça um resumo conciso do conteúdo principal desta página web. Foque no que é mais relevante para o usuário entender rapidamente do que se trata a página.',
 
-        'explicar' => 'Explique de forma detalhada o propósito desta página web, suas funcionalidades principais e o tipo de conteúdo que ela oferece. Ajude o usuário a entender completamente o que ele pode fazer nesta página.',
-
         'orientar' => 'Forneça orientações práticas de como o usuário pode navegar e interagir com esta página. Descreva os elementos interativos disponíveis (botões, links, formulários, menus) e sugira um caminho lógico de navegação.',
+
+        'buscar' => 'O usuário deseja realizar uma busca na internet. Use o conteúdo da página atual como contexto para entender a busca, caso seja relevante. Pesquise e responda à dúvida ou solicitação do usuário de forma clara, direta e acessível, citando fontes quando apropriado.',
     ];
 
     protected DomSanitizerService $sanitizer;
@@ -52,16 +52,16 @@ PROMPT;
      * @param string $htmlContent Conteúdo HTML bruto da página
      * @param string $command Comando de voz (resumir, explicar, orientar)
      * @param string|null $url URL da página analisada
-     * @return string Resposta textual do Gemini
+     * @return array{text: string, search_sources: array|null} Resposta textual e fontes de pesquisa (quando disponíveis)
      */
-    public function analyze(string $htmlContent, string $command, ?string $url = null, ?string $userPrompt = null): string
+    public function analyze(string $htmlContent, string $command, ?string $url = null, ?string $userPrompt = null): array
     {
         $apiKey = config('services.gemini.key');
         $model = config('services.gemini.model', 'gemini-2.0-flash');
 
         if (!$apiKey) {
             Log::warning('Gemini API key está ausente. Não é possível processar o comando: ' . $command);
-            return 'O serviço de inteligência artificial não está configurado. Entre em contato com o administrador.';
+            return ['text' => 'O serviço de inteligência artificial não está configurado. Entre em contato com o administrador.'];
         }
 
         // Sanitizar o DOM antes de enviar
@@ -83,30 +83,38 @@ PROMPT;
         // Chamar a API do Gemini
         $endpoint = "{$this->baseUrl}/{$model}:generateContent?key={$apiKey}";
 
-        try {
-            $response = Http::timeout(120)->post($endpoint, [
-                'system_instruction' => [
+        $payload = [
+            'system_instruction' => [
+                'parts' => [
+                    ['text' => $this->systemInstruction],
+                ],
+            ],
+            'contents' => [
+                [
                     'parts' => [
-                        ['text' => $this->systemInstruction],
+                        ['text' => $finalPrompt],
                     ],
                 ],
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $finalPrompt],
-                        ],
-                    ],
-                ],
-                'generationConfig' => [
-                    'temperature' => 0.4,
-                    'maxOutputTokens' => 4096,
-                ],
-            ]);
+            ],
+            'generationConfig' => [
+                'temperature' => 0.4,
+                'maxOutputTokens' => 4096,
+            ],
+        ];
+
+        if ($command === 'buscar') {
+            $payload['tools'] = [
+                ['googleSearch' => new \stdClass()]
+            ];
+        }
+
+        try {
+            $response = Http::timeout(120)->post($endpoint, $payload);
         } catch (ConnectionException $e) {
             Log::error('Gemini API: timeout de conexão', [
                 'error' => $e->getMessage(),
             ]);
-            return 'A análise demorou muito e foi cancelada. A página pode ser muito grande. Tente novamente.';
+            return ['text' => 'A análise demorou muito e foi cancelada. A página pode ser muito grande. Tente novamente.'];
         }
 
         if ($response->failed()) {
@@ -114,7 +122,7 @@ PROMPT;
                 'status' => $response->status(),
                 'response' => $response->body(),
             ]);
-            return 'Não foi possível analisar a página neste momento. Tente novamente em alguns instantes.';
+            return ['text' => 'Não foi possível analisar a página neste momento. Tente novamente em alguns instantes.'];
         }
 
         $data = $response->json();
@@ -125,7 +133,7 @@ PROMPT;
 
         if ($finishReason === 'SAFETY') {
             Log::warning('Gemini bloqueou a resposta por filtro de segurança', ['response' => $data]);
-            return 'Não foi possível analisar esta página pois o conteúdo foi bloqueado pelo filtro de segurança.';
+            return ['text' => 'Não foi possível analisar esta página pois o conteúdo foi bloqueado pelo filtro de segurança.'];
         }
 
         // Extrair o texto da resposta — concatenar todas as parts
@@ -139,13 +147,36 @@ PROMPT;
 
         if (empty($text)) {
             Log::warning('Gemini retornou resposta vazia', ['response' => $data]);
-            return 'Não foi possível gerar uma análise para esta página.';
+            return ['text' => 'Não foi possível gerar uma análise para esta página.'];
         }
 
         // Guardrail final: remover qualquer tag HTML residual da resposta
         $text = strip_tags($text);
         $text = trim($text);
 
-        return $text;
+        // Extrair fontes do Google Search Grounding (quando disponíveis)
+        $searchSources = null;
+        if ($command === 'buscar') {
+            $groundingMetadata = $data['candidates'][0]['groundingMetadata'] ?? null;
+            if ($groundingMetadata && isset($groundingMetadata['groundingChunks'])) {
+                $sources = [];
+                foreach ($groundingMetadata['groundingChunks'] as $chunk) {
+                    if (isset($chunk['web']['uri'])) {
+                        $sources[] = [
+                            'title' => $chunk['web']['title'] ?? 'Fonte',
+                            'url'   => $chunk['web']['uri'],
+                        ];
+                    }
+                }
+                if (!empty($sources)) {
+                    $searchSources = $sources;
+                }
+            }
+        }
+
+        return [
+            'text'           => $text,
+            'search_sources' => $searchSources,
+        ];
     }
 }
