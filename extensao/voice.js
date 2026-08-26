@@ -18,6 +18,7 @@ if (!SpeechRecognition) {
 
   let isListening = false;
   let isProcessing = false; // Trava escuta enquanto aguarda resposta da API
+  let accumulatedTranscript = ''; // Variável para acumular fala até o usuário dar um comando
 
   // --- Efeitos sonoros via Web Audio API ---
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -114,17 +115,22 @@ if (!SpeechRecognition) {
     const lastResult = event.results[event.results.length - 1];
 
     if (lastResult.isFinal) {
-      const command = lastResult[0].transcript.trim().toLowerCase();
+      const transcript = lastResult[0].transcript.trim();
+      if (!transcript) return;
 
-      // Exibir o texto reconhecido
+      // Acumula o que o usuário disse para que o contexto antes do comando não se perca
+      accumulatedTranscript = accumulatedTranscript ? accumulatedTranscript + ' ' + transcript : transcript;
+      const lowerCaseAccumulated = accumulatedTranscript.toLowerCase();
+
+      // Exibir apenas a nova frase no transcript
       const entry = document.createElement('div');
-      entry.textContent = `» ${command}`;
+      entry.textContent = `» ${transcript}`;
       transcriptDiv.appendChild(entry);
       transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
 
-      // Verificar se é um comando válido
-      if (!isValidCommand(command)) {
-        // Não é um comando reconhecido — ignorar e continuar ouvindo
+      // Verificar se a frase acumulada possui uma palavra-chave
+      if (!isValidCommand(lowerCaseAccumulated)) {
+        // Não encontrou palavra-chave, mas o texto foi acumulado
         return;
       }
 
@@ -140,11 +146,14 @@ if (!SpeechRecognition) {
       // 🔊 Efeito sonoro de envio
       playSendSound();
 
-      // Enviar o comando para o background.js
+      // Enviar o comando inteiro acumulado para o background.js
       chrome.runtime.sendMessage({
         action: 'voiceCommand',
-        command: command
+        command: lowerCaseAccumulated
       });
+
+      // Limpar o acumulador para as próximas falas
+      accumulatedTranscript = '';
     }
   };
 

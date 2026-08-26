@@ -83,6 +83,19 @@ PROMPT;
         // Chamar a API do Gemini
         $endpoint = "{$this->baseUrl}/{$model}:generateContent?key={$apiKey}";
 
+        $generationConfig = [
+            'temperature' => 0.4,
+            'maxOutputTokens' => 4096,
+        ];
+
+        // Adicionar thinkingLevel para modelos Gemini 3.x (MINIMAL, LOW, MEDIUM, HIGH)
+        $thinkingLevel = config('services.gemini.thinking_level');
+        if ($thinkingLevel) {
+            $generationConfig['thinkingConfig'] = [
+                'thinkingLevel' => strtoupper($thinkingLevel),
+            ];
+        }
+
         $payload = [
             'system_instruction' => [
                 'parts' => [
@@ -96,10 +109,7 @@ PROMPT;
                     ],
                 ],
             ],
-            'generationConfig' => [
-                'temperature' => 0.4,
-                'maxOutputTokens' => 4096,
-            ],
+            'generationConfig' => $generationConfig,
         ];
 
         if ($command === 'buscar') {
