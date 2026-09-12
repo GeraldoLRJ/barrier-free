@@ -40,9 +40,14 @@ return [
     ],
 
     'gemini' => [
-        'key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+        'key'           => env('GEMINI_API_KEY'),
+        'model'         => env('GEMINI_MODEL', 'gemini-2.0-flash'),
         'thinking_level' => env('GEMINI_THINKING_LEVEL'),
+    ],
+
+    'brave_search' => [
+        'key'           => env('BRAVE_SEARCH_API_KEY'),
+        'results_count' => env('BRAVE_SEARCH_RESULTS', 5),
     ],
 
 ];

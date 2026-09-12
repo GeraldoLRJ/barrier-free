@@ -36,14 +36,16 @@ PROMPT;
 
         'orientar' => 'Forneça orientações práticas de como o usuário pode navegar e interagir com esta página. Descreva os elementos interativos disponíveis (botões, links, formulários, menus) e sugira um caminho lógico de navegação.',
 
-        'buscar' => 'O usuário deseja realizar uma busca na internet. Use o conteúdo da página atual como contexto para entender a busca, caso seja relevante. Pesquise e responda à dúvida ou solicitação do usuário de forma clara, direta e acessível, citando fontes quando apropriado.',
+        'buscar' => 'O usuário realizou uma busca na internet e os resultados reais foram fornecidos abaixo. Com base exclusivamente nesses resultados, responda à dúvida do usuário de forma clara, direta e acessível. Mencione os títulos das fontes que embasaram sua resposta.',
     ];
 
     protected DomSanitizerService $sanitizer;
+    protected BraveSearchService $braveSearch;
 
-    public function __construct(DomSanitizerService $sanitizer)
+    public function __construct(DomSanitizerService $sanitizer, BraveSearchService $braveSearch)
     {
-        $this->sanitizer = $sanitizer;
+        $this->sanitizer    = $sanitizer;
+        $this->braveSearch  = $braveSearch;
     }
 
     /**
@@ -67,24 +69,56 @@ PROMPT;
         // Sanitizar o DOM antes de enviar
         $sanitizedHtml = $this->sanitizer->sanitize($htmlContent);
 
+        // --- Comando BUSCAR: chamar Brave Search e injetar resultados no prompt ---
+        $braveResults  = [];
+        $searchSources = null;
+
+        if ($command === 'buscar') {
+            // Usar o user_prompt como query; fallback para o tema da página
+            $searchQuery = $userPrompt ?? ($url ?? 'acessibilidade web');
+
+            Log::info('Brave Search: iniciando busca', ['query' => $searchQuery]);
+
+            $braveResults  = $this->braveSearch->search($searchQuery);
+            $searchSources = !empty($braveResults)
+                ? array_map(fn($r) => ['title' => $r['title'], 'url' => $r['url']], $braveResults)
+                : null;
+        }
+
         // Montar o prompt
         $baseCommandPrompt = $this->commandPrompts[$command] ?? $this->commandPrompts['resumir'];
-        
+
         $urlContext = $url ? "URL da página: {$url}\n\n" : '';
-        
+
         // Incorpora a instrução livre do usuário se ele tiver falado mais coisas
         $userInstruction = '';
         if ($userPrompt && trim($userPrompt) !== '') {
-            $userInstruction = "Instrução específica do usuário (atenda a este pedido baseando-se no conteúdo): \"{$userPrompt}\"\n\n";
+            $userInstruction = "Instrução do usuário: \"{$userPrompt}\"\n\n";
         }
 
-        $finalPrompt = "{$baseCommandPrompt}\n\n{$userInstruction}{$urlContext}Conteúdo da página:\n{$sanitizedHtml}";
+        // Montar bloco de resultados da Brave Search (apenas para comando buscar)
+        $braveContext = '';
+        if ($command === 'buscar' && !empty($braveResults)) {
+            $braveContext = "Resultados de busca encontrados:\n";
+            foreach ($braveResults as $index => $result) {
+                $num = $index + 1;
+                $braveContext .= "{$num}. {$result['title']} | {$result['url']}\n";
+                if (!empty($result['description'])) {
+                    $braveContext .= "   {$result['description']}\n";
+                }
+            }
+            $braveContext .= "\n";
+        } elseif ($command === 'buscar' && empty($braveResults)) {
+            $braveContext = "Não foi possível obter resultados de busca externos. Responda com base no seu conhecimento, deixando claro que não há fontes verificadas disponíveis no momento.\n\n";
+        }
+
+        $finalPrompt = "{$baseCommandPrompt}\n\n{$userInstruction}{$braveContext}{$urlContext}Conteúdo da página (contexto adicional):\n{$sanitizedHtml}";
 
         // Chamar a API do Gemini
         $endpoint = "{$this->baseUrl}/{$model}:generateContent?key={$apiKey}";
 
         $generationConfig = [
-            'temperature' => 0.4,
+            'temperature'     => 0.4,
             'maxOutputTokens' => 4096,
         ];
 
@@ -111,12 +145,6 @@ PROMPT;
             ],
             'generationConfig' => $generationConfig,
         ];
-
-        if ($command === 'buscar') {
-            $payload['tools'] = [
-                ['googleSearch' => new \stdClass()]
-            ];
-        }
 
         try {
             $response = Http::timeout(120)->post($endpoint, $payload);
@@ -164,26 +192,7 @@ PROMPT;
         $text = strip_tags($text);
         $text = trim($text);
 
-        // Extrair fontes do Google Search Grounding (quando disponíveis)
-        $searchSources = null;
-        if ($command === 'buscar') {
-            $groundingMetadata = $data['candidates'][0]['groundingMetadata'] ?? null;
-            if ($groundingMetadata && isset($groundingMetadata['groundingChunks'])) {
-                $sources = [];
-                foreach ($groundingMetadata['groundingChunks'] as $chunk) {
-                    if (isset($chunk['web']['uri'])) {
-                        $sources[] = [
-                            'title' => $chunk['web']['title'] ?? 'Fonte',
-                            'url'   => $chunk['web']['uri'],
-                        ];
-                    }
-                }
-                if (!empty($sources)) {
-                    $searchSources = $sources;
-                }
-            }
-        }
-
+        // As search_sources já foram montadas antes da chamada ao Gemini (vindas da Brave Search)
         return [
             'text'           => $text,
             'search_sources' => $searchSources,
