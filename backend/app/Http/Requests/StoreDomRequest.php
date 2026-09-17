@@ -15,7 +15,7 @@ class StoreDomRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'html_content' => ['required', 'string'],
+            'html_content' => ['nullable', 'string'],
             'url'          => ['nullable', 'url', 'string', new \App\Rules\SafeUrl()],
             'command'      => ['nullable', 'string', 'in:resumir,orientar,buscar'],
             'user_prompt'  => ['nullable', 'string', 'max:255'],

@@ -18,13 +18,13 @@ class DomProcessController extends Controller
         // Pega dados validados do payload
         $validated = $request->validated();
 
-        Log::info('URL: ' . $validated['url']);
-        Log::info('Comando: ' . $validated['command']);
-        Log::info('Conteúdo HTML: ' . $validated['html_content']);
+        Log::info('URL: ' . ($validated['url'] ?? ''));
+        Log::info('Comando: ' . ($validated['command'] ?? ''));
+        Log::info('Conteúdo HTML: ' . ($validated['html_content'] ?? ''));
 
         // Passa os dados para a Action responsável por processar a regra de negócio
         $result = $processDomAction->execute(
-            $validated['html_content'],
+            $validated['html_content'] ?? null,
             $validated['url'] ?? null,
             $validated['command'] ?? 'analisar',
             $validated['user_prompt'] ?? null

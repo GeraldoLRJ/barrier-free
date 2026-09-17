@@ -190,13 +190,42 @@ if (!SpeechRecognition) {
   };
 
   // --- Text-to-Speech (TTS) para respostas da IA ---
+  let availableVoices = [];
+  function loadVoices() {
+    availableVoices = window.speechSynthesis.getVoices();
+  }
+  
+  if (window.speechSynthesis) {
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }
+
   function speakResponse(text) {
     // Reconhecimento já está parado (isProcessing === true)
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pt-BR';
-    utterance.rate = 0.95;
+    utterance.rate = 1.0; // Voltei para 1.0 pois costuma soar mais natural do que 0.95 com vozes boas
     utterance.pitch = 1;
+
+    // Selecionar uma voz mais fluida/natural, se disponível
+    if (availableVoices.length > 0) {
+      const ptBrVoices = availableVoices.filter(v => v.lang === 'pt-BR' || v.lang === 'pt_BR' || v.lang === 'pt-br');
+      
+      // Priorizar vozes de melhor qualidade (Google, Online, Premium, Natural)
+      let bestVoice = ptBrVoices.find(v => v.name.includes('Google') || v.name.includes('Online') || v.name.includes('Premium') || v.name.includes('Natural'));
+      
+      // Se não achar as premium, pega qualquer uma em pt-BR (pode ser a da Microsoft ou padrão)
+      if (!bestVoice && ptBrVoices.length > 0) {
+        bestVoice = ptBrVoices[0];
+      }
+
+      if (bestVoice) {
+        utterance.voice = bestVoice;
+      }
+    }
 
     utterance.onend = () => {
       // TTS terminou — desbloquear e retomar escuta
