@@ -31,9 +31,9 @@ PROMPT;
      * Prompts específicos para cada comando de voz.
      */
     protected array $commandPrompts = [
-        'resumir' => 'Faça um resumo do conteúdo principal desta página para uma pessoa cega que está ouvindo a resposta em voz alta. Por padrão, seja breve e direto: use entre 3 e 5 frases naturais que cubram o essencial. Se o usuário tiver pedido explicitamente uma explicação mais detalhada (como "explique mais" ou "mais detalhes"), então aprofunde o resumo com mais informações relevantes. Nunca corte a resposta no meio — sempre conclua o pensamento.',
+        'resumir' => 'Faça um resumo do conteúdo principal desta página para uma pessoa cega que está ouvindo a resposta em voz alta. Por padrão, seja breve e direto: use entre 3 e 5 frases naturais que cubram o essencial. Em seguida, se houver seções ou links de conteúdo que o usuário possa acessar a partir desta página (por exemplo, áreas de um site como Notícias, Fórum ou Games, inclusive os atalhos que aparecem abaixo de um resultado de busca), cite até 5 deles pelo nome e diga que ele pode dizer "abrir" seguido do nome para acessá-los. Ignore controles genéricos como login, filtros, configurações e menus do próprio buscador. Se o usuário tiver pedido explicitamente uma explicação mais detalhada (como "explique mais" ou "mais detalhes"), então aprofunde o resumo com mais informações relevantes. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
-        'orientar' => 'Oriente uma pessoa cega sobre como navegar e usar esta página, como se estivesse explicando pelo telefone. Por padrão, seja objetivo: mencione os principais elementos interativos (campos, botões, menus, links) em até 5 frases. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
+        'orientar' => 'Oriente uma pessoa cega sobre como navegar e usar esta página, como se estivesse explicando pelo telefone. Priorize os destinos de conteúdo que ela pode acessar: cite pelo nome as principais seções e links relevantes (por exemplo, áreas de um site como Notícias, Fórum ou Tech, inclusive os atalhos que aparecem abaixo de um resultado de busca), e diga que ela pode dizer "abrir" seguido do nome para ir até eles. Mencione campos, botões e filtros genéricos da página apenas brevemente, depois dos destinos de conteúdo. Por padrão, seja objetivo, em até 6 frases. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
         'buscar' => 'O usuário fez uma busca por voz e os resultados estão abaixo. Responda a dúvida do usuário em no máximo 2 frases diretas, com base nos resultados. Depois diga quantas fontes foram encontradas e que o usuário pode dizer o número da fonte para navegar até ela. Por exemplo: encontrei 3 fontes. Diga "abrir fonte um", "abrir fonte dois" ou "abrir fonte três" para navegar.',
     ];
@@ -114,7 +114,6 @@ PROMPT;
         $finalPrompt = "{$baseCommandPrompt}\n\n{$userInstruction}{$braveContext}{$urlContext}Conteúdo da página (contexto adicional):\n{$sanitizedHtml}";
 
         // Chamar a API do Gemini
-        $endpoint = "{$this->baseUrl}/{$model}:generateContent?key={$apiKey}";
 
         $generationConfig = [
             'temperature'     => 0.3,
@@ -145,42 +144,63 @@ PROMPT;
             'generationConfig' => $generationConfig,
         ];
 
-        // Tentativas com backoff exponencial para lidar com sobrecarga temporária da API (503)
-        $maxAttempts = 3;
-        $backoffSeconds = [0, 2, 5]; // Esperas antes de cada tentativa (0 = imediata)
+        // Cadeia de fallback: modelo principal + modelos alternativos (GEMINI_FALLBACK_MODELS).
+        // Em erro de sobrecarga/indisponibilidade, pula direto para o próximo modelo em vez de
+        // insistir no mesmo — a sobrecarga do Gemini costuma afetar modelos específicos.
+        $models = $this->buildModelChain($model);
+        $fallbackStatuses = [404, 429, 500, 503, 504];
+        $maxRounds = 2;          // Quantas vezes percorrer a cadeia inteira
+        $roundBackoffSeconds = 2; // Espera antes de recomeçar a cadeia
         $response = null;
+        $usedModel = null;
+        $timedOut = false;
 
-        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
-            if ($backoffSeconds[$attempt] > 0) {
-                Log::info("Gemini API: aguardando {$backoffSeconds[$attempt]}s antes da tentativa " . ($attempt + 1));
-                sleep($backoffSeconds[$attempt]);
+        for ($round = 1; $round <= $maxRounds && !$usedModel; $round++) {
+            if ($round > 1) {
+                Log::info("Gemini API: todos os modelos falharam, aguardando {$roundBackoffSeconds}s antes da rodada {$round}");
+                sleep($roundBackoffSeconds);
             }
 
-            try {
-                $response = Http::timeout(120)->post($endpoint, $payload);
-            } catch (ConnectionException $e) {
-                Log::error('Gemini API: timeout de conexão', ['error' => $e->getMessage(), 'attempt' => $attempt + 1]);
-                if ($attempt === $maxAttempts - 1) {
-                    return ['text' => 'A análise demorou muito e foi cancelada. A página pode ser muito grande. Tente novamente.'];
+            foreach ($models as $candidate) {
+                $endpoint = "{$this->baseUrl}/{$candidate}:generateContent?key={$apiKey}";
+
+                try {
+                    $response = Http::timeout(120)->post($endpoint, $payload);
+                } catch (ConnectionException $e) {
+                    Log::error('Gemini API: timeout de conexão', ['model' => $candidate, 'round' => $round, 'error' => $e->getMessage()]);
+                    $timedOut = true;
+                    $response = null;
+                    continue;
                 }
-                continue;
-            }
 
-            // Se a resposta for bem-sucedida ou for um erro permanente (não retryável), parar
-            $status = $response->status();
-            if ($response->successful() || !in_array($status, [429, 503])) {
-                break;
-            }
+                $status = $response->status();
+                if ($response->successful() || !in_array($status, $fallbackStatuses)) {
+                    // Sucesso ou erro permanente (ex: 400 payload inválido) — parar a cadeia
+                    $usedModel = $candidate;
+                    break;
+                }
 
-            Log::warning("Gemini API: erro {$status} (tentativa " . ($attempt + 1) . " de {$maxAttempts})");
+                Log::warning("Gemini API: modelo {$candidate} retornou {$status} (rodada {$round}), tentando próximo");
+            }
+        }
+
+        if ($response === null) {
+            return ['text' => $timedOut
+                ? 'A análise demorou muito e foi cancelada. A página pode ser muito grande. Tente novamente.'
+                : 'Não foi possível analisar a página neste momento. Tente novamente em alguns instantes.'];
         }
 
         if ($response->failed()) {
             Log::error('Gemini API falhou', [
+                'model' => $usedModel ?? 'todos',
                 'status' => $response->status(),
                 'response' => $response->body(),
             ]);
             return ['text' => 'Não foi possível analisar a página neste momento. Tente novamente em alguns instantes.'];
+        }
+
+        if ($usedModel !== $model) {
+            Log::info("Gemini API: resposta obtida com modelo de fallback {$usedModel}");
         }
 
         $data = $response->json();
@@ -217,5 +237,23 @@ PROMPT;
             'text'           => $text,
             'search_sources' => $searchSources,
         ];
+    }
+
+    /**
+     * Monta a cadeia ordenada de modelos: principal primeiro, seguido dos fallbacks
+     * configurados em GEMINI_FALLBACK_MODELS (separados por vírgula), sem duplicatas.
+     *
+     * @return string[]
+     */
+    protected function buildModelChain(string $primaryModel): array
+    {
+        $fallbacks = config('services.gemini.fallback_models', '');
+        if (is_string($fallbacks)) {
+            $fallbacks = explode(',', $fallbacks);
+        }
+
+        $chain = array_map('trim', array_merge([$primaryModel], (array) $fallbacks));
+
+        return array_values(array_unique(array_filter($chain)));
     }
 }

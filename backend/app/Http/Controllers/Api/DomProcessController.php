@@ -24,7 +24,7 @@ class DomProcessController extends Controller
 
         // Passa os dados para a Action responsável por processar a regra de negócio
         $result = $processDomAction->execute(
-            $validated['html_content'] ?? null,
+            $validated['html_content'] ?? '',
             $validated['url'] ?? null,
             $validated['command'] ?? 'analisar',
             $validated['user_prompt'] ?? null

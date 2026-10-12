@@ -41,7 +41,7 @@ class DomSanitizerService
      * Limite máximo de caracteres do conteúdo sanitizado
      * para enviar ao modelo de IA.
      */
-    protected int $maxLength = 15000;
+    protected int $maxLength = 30000;
 
     /**
      * Sanitiza o conteúdo HTML removendo elementos irrelevantes e perigosos,
@@ -73,7 +73,17 @@ class DomSanitizerService
             return '';
         }
 
-        $structuredText = $this->convertNodeToText($body);
+        // Colocar o conteúdo principal (<main> / role="main") ANTES do restante da página.
+        // Em páginas grandes (ex: resultados do Google) o cabeçalho, menus e filtros vêm
+        // primeiro no DOM e consumiriam todo o limite de caracteres antes do conteúdo relevante.
+        $mainNode = (new DOMXPath($dom))->query('//main | //*[@role="main"]')->item(0);
+        if ($mainNode && $mainNode !== $body && $mainNode->parentNode) {
+            $mainText = $this->convertNodeToText($mainNode);
+            $mainNode->parentNode->removeChild($mainNode);
+            $structuredText = $mainText . "\n" . $this->convertNodeToText($body);
+        } else {
+            $structuredText = $this->convertNodeToText($body);
+        }
 
         // 4. Limpar espaços excessivos
         $structuredText = preg_replace('/[ \t]+/', ' ', $structuredText) ?? $structuredText;
@@ -283,24 +293,21 @@ class DomSanitizerService
     }
 
     /**
-     * Converte uma tag <a> em marcador textual com texto e destino.
+     * Converte uma tag <a> em marcador textual com o texto do link.
+     * A URL de destino é omitida: a IA não deve lê-la em voz alta e URLs longas
+     * (ex: redirecionamentos do Google) consumiam boa parte do limite de caracteres.
+     * A navegação por voz usa os links extraídos separadamente pelo DomLinkExtractorService.
      */
     protected function convertLink(DOMNode $node, string $childrenText): string
     {
-        $href = $node->getAttribute('href') ?? '';
         $ariaLabel = $node->getAttribute('aria-label') ?? '';
         $linkText = trim($ariaLabel ?: $childrenText);
 
-        if (empty($linkText) && empty($href)) {
+        if (empty($linkText)) {
             return '';
         }
 
-        // Ignorar links de âncora vazia ou javascript:void
-        if (empty($href) || $href === '#' || str_starts_with($href, 'javascript:')) {
-            return $linkText ? " [Link: {$linkText}] " : '';
-        }
-
-        return " [Link: {$linkText} -> {$href}] ";
+        return " [Link: {$linkText}] ";
     }
 
     /**

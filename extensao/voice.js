@@ -101,6 +101,7 @@ if (!SpeechRecognition) {
     'orientar', 'ajudar', 'orientação', 'ajuda',
     'buscar', 'pesquisar', 'procurar',
     'abrir', 'navegar',
+    'comandos',
   ];
 
   function isValidCommand(text) {

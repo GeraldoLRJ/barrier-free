@@ -43,6 +43,7 @@ return [
         'key'           => env('GEMINI_API_KEY'),
         'model'         => env('GEMINI_MODEL', 'gemini-2.0-flash'),
         'thinking_level' => env('GEMINI_THINKING_LEVEL'),
+        'fallback_models' => env('GEMINI_FALLBACK_MODELS', ''), // Lista separada por vírgula
     ],
 
     'brave_search' => [

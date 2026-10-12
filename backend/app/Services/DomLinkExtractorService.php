@@ -10,7 +10,7 @@ class DomLinkExtractorService
     /**
      * Número máximo de links retornados para não sobrecarregar a extensão.
      */
-    protected int $maxLinks = 30;
+    protected int $maxLinks = 60;
 
     /**
      * Extrai os links navegáveis de um HTML bruto.
@@ -33,8 +33,12 @@ class DomLinkExtractorService
 
         $xpath = new DOMXPath($dom);
 
-        // Buscar todas as tags <a> com href
-        $nodes = $xpath->query('//a[@href]');
+        // Buscar todas as tags <a> com href — links do conteúdo principal (<main> / role="main")
+        // primeiro, para que menus e cabeçalhos não ocupem o limite nem ganhem no desempate
+        // do matching por voz (ex: "Notícias" do resultado vs. aba "Notícias" do Google).
+        $mainNodes = $xpath->query('(//main | //*[@role="main"])//a[@href]');
+        $allNodes  = $xpath->query('//a[@href]');
+        $nodes = array_merge(iterator_to_array($mainNodes), iterator_to_array($allNodes));
 
         $links   = [];
         $seen    = [];

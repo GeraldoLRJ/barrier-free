@@ -299,6 +299,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             }
         }
 
+        // --- Comando de ajuda: lista todos os comandos disponíveis ---
+        if (cmd.includes("comandos")) {
+            const helpText =
+                "Aqui estão os comandos de voz disponíveis. " +
+                "Diga Resumir ou Resumo para que eu leia e resuma a página atual. " +
+                "Diga Orientar, Orientação, Ajudar ou Ajuda para receber orientação sobre o que fazer na página. " +
+                "Diga Buscar, Pesquisar ou Procurar seguido do que você quer encontrar, e eu faço a busca por você. " +
+                "Diga Abrir, Navegar, Ir para ou Ir ao seguido do nome do site ou endereço para navegar diretamente. " +
+                "Depois de uma busca, diga Abrir a primeira fonte, Abrir fonte dois, até a quinta, para acessar os resultados. " +
+                "E é claro, diga Comandos a qualquer momento para ouvir essa lista novamente.";
+            chrome.runtime.sendMessage({
+                action: "processResult",
+                success: true,
+                message: "Comandos disponíveis listados.",
+                ai_response: helpText
+            });
+            return;
+        }
+
         // --- Comandos que precisam do DOM da página atual ---
         if (cmd.includes("resumir") || cmd.includes("resumo")) {
             captureCurrentTabDom('resumir', cmd);
