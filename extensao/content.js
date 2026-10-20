@@ -1,6 +1,9 @@
-// Extrai o conteúdo do body e a URL
+// Extrai o conteúdo do body (sem scripts/styles) e a URL
+const bodyClone = document.body.cloneNode(true);
+bodyClone.querySelectorAll('script, style, noscript, iframe').forEach(el => el.remove());
+
 const domData = {
-  html_content: document.body.innerHTML,
+  html_content: bodyClone.innerHTML,
   url: window.location.href
 };
 

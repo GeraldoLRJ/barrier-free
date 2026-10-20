@@ -35,7 +35,7 @@ PROMPT;
 
         'orientar' => 'Oriente uma pessoa cega sobre como navegar e usar esta página, como se estivesse explicando pelo telefone. Priorize os destinos de conteúdo que ela pode acessar: cite pelo nome as principais seções e links relevantes (por exemplo, áreas de um site como Notícias, Fórum ou Tech, inclusive os atalhos que aparecem abaixo de um resultado de busca), e diga que ela pode dizer "abrir" seguido do nome para ir até eles. Mencione campos, botões e filtros genéricos da página apenas brevemente, depois dos destinos de conteúdo. Por padrão, seja objetivo, em até 6 frases. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
-        'buscar' => 'O usuário fez uma busca por voz e os resultados estão abaixo. Responda a dúvida do usuário em no máximo 2 frases diretas, com base nos resultados. Depois diga quantas fontes foram encontradas e que o usuário pode dizer o número da fonte para navegar até ela. Por exemplo: encontrei 3 fontes. Diga "abrir fonte um", "abrir fonte dois" ou "abrir fonte três" para navegar.',
+        'buscar' => 'O usuário fez uma busca por voz e os resultados estão abaixo. Primeiro, responda a dúvida do usuário em no máximo 2 frases diretas, com base nos resultados. Em seguida, liste obrigatoriamente o título de todas as fontes fornecidas na ordem exata, dizendo "Fonte um:" seguido do título, "Fonte dois:" seguido do título, e assim por diante até a última fonte (adapte os títulos para leitura fluida em voz alta, sem barras verticais ou símbolos visuais). Por fim, diga que o usuário pode dizer "abrir fonte um", "abrir fonte dois", até a última fonte, para navegar.',
     ];
 
     protected DomSanitizerService $sanitizer;
@@ -98,12 +98,13 @@ PROMPT;
         // Montar bloco de resultados da Brave Search (apenas para comando buscar)
         $braveContext = '';
         if ($command === 'buscar' && !empty($braveResults)) {
-            $braveContext = "Resultados de busca (liste-os para o usuário numericamente na sua resposta):\n";
+            $totalSources = count($braveResults);
+            $braveContext = "Resultados de busca ({$totalSources} fontes encontradas — após responder à pergunta, você DEVE anunciar o título de todas as {$totalSources} fontes exatamente nesta ordem numérica):\n";
             foreach ($braveResults as $index => $result) {
                 $num = $index + 1;
-                $braveContext .= "Fonte {$num}: {$result['title']}\n";
+                $braveContext .= "Fonte {$num} (Título da fonte a ser anunciado): {$result['title']}\n";
                 if (!empty($result['description'])) {
-                    $braveContext .= "Descrição: {$result['description']}\n";
+                    $braveContext .= "Trecho de conteúdo da Fonte {$num}: {$result['description']}\n";
                 }
                 $braveContext .= "\n";
             }
@@ -163,9 +164,17 @@ PROMPT;
 
             foreach ($models as $candidate) {
                 $endpoint = "{$this->baseUrl}/{$candidate}:generateContent?key={$apiKey}";
+                $startTime = microtime(true);
 
                 try {
-                    $response = Http::timeout(120)->post($endpoint, $payload);
+                    $response = Http::connectTimeout(5)
+                        ->timeout(30)
+                        ->withOptions([
+                            'curl' => [
+                                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                            ],
+                        ])
+                        ->post($endpoint, $payload);
                 } catch (ConnectionException $e) {
                     Log::error('Gemini API: timeout de conexão', ['model' => $candidate, 'round' => $round, 'error' => $e->getMessage()]);
                     $timedOut = true;
@@ -173,14 +182,16 @@ PROMPT;
                     continue;
                 }
 
+                $elapsedMs = round((microtime(true) - $startTime) * 1000);
                 $status = $response->status();
                 if ($response->successful() || !in_array($status, $fallbackStatuses)) {
                     // Sucesso ou erro permanente (ex: 400 payload inválido) — parar a cadeia
                     $usedModel = $candidate;
+                    Log::info("Gemini API: resposta do modelo {$candidate} em {$elapsedMs}ms (status {$status})");
                     break;
                 }
 
-                Log::warning("Gemini API: modelo {$candidate} retornou {$status} (rodada {$round}), tentando próximo");
+                Log::warning("Gemini API: modelo {$candidate} retornou {$status} em {$elapsedMs}ms (rodada {$round}), tentando próximo");
             }
         }
 

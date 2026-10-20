@@ -270,14 +270,10 @@ if (!SpeechRecognition) {
 
           let spokenText = request.ai_response;
           if (request.search_sources && request.search_sources.length > 0) {
-            const count = request.search_sources.length;
-            const plural = count > 1 ? 's' : '';
-            spokenText += `. Encontrei ${count} fonte${plural} relacionada${plural}. Diga "abrir" para navegar até a primeira fonte.`;
-
-            // Exibir fontes no transcript para referência
+            // Exibir fontes numeradas no transcript para referência visual
             const sourcesEntry = document.createElement('div');
             sourcesEntry.style.color = '#64B5F6';
-            sourcesEntry.textContent = '🔗 Fontes: ' + request.search_sources.map(s => s.title).join(', ');
+            sourcesEntry.textContent = '🔗 Fontes: ' + request.search_sources.map((s, i) => `${i + 1}. ${s.title}`).join(' | ');
             transcriptDiv.appendChild(sourcesEntry);
           }
 

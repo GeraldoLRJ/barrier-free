@@ -17,7 +17,8 @@ function detectSourceIndex(cmd) {
     const normalized = cmd.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     for (const [word, index] of Object.entries(NUMBER_WORDS)) {
         const wordNorm = word.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        if (normalized.includes(wordNorm)) {
+        const regex = new RegExp(`\\b${wordNorm}\\b`, 'i');
+        if (regex.test(normalized)) {
             return index;
         }
     }
@@ -73,9 +74,11 @@ async function captureCurrentTabDom(command = 'analisar', userPrompt = null) {
         chrome.scripting.executeScript({
             target: { tabId: tab.id },
             function: () => {
+                const clone = document.body.cloneNode(true);
+                clone.querySelectorAll('script, style, noscript, iframe').forEach(el => el.remove());
                 return {
                     url: window.location.href,
-                    html_content: document.body.innerHTML
+                    html_content: clone.innerHTML
                 };
             }
         }, (injectionResults) => {

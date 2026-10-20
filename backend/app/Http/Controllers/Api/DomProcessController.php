@@ -20,7 +20,7 @@ class DomProcessController extends Controller
 
         Log::info('URL: ' . ($validated['url'] ?? ''));
         Log::info('Comando: ' . ($validated['command'] ?? ''));
-        Log::info('Conteúdo HTML: ' . ($validated['html_content'] ?? ''));
+        Log::info('Tamanho do HTML recebido: ' . mb_strlen($validated['html_content'] ?? '') . ' caracteres');
 
         // Passa os dados para a Action responsável por processar a regra de negócio
         $result = $processDomAction->execute(

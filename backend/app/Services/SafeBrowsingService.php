@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SafeBrowsingService
 {
@@ -26,25 +28,51 @@ class SafeBrowsingService
             return true;
         }
 
-        $response = Http::post($this->apiUrl . '?key=' . $apiKey, [
-            'client' => [
-                'clientId'      => 'barrier-free',
-                'clientVersion' => '1.0.0',
-            ],
-            'threatInfo' => [
-                'threatTypes'      => [
-                    'MALWARE',
-                    'SOCIAL_ENGINEERING',
-                    'UNWANTED_SOFTWARE',
-                    'POTENTIALLY_HARMFUL_APPLICATION',
-                ],
-                'platformTypes'    => ['ANY_PLATFORM'],
-                'threatEntryTypes' => ['URL'],
-                'threatEntries'    => [
-                    ['url' => $url],
-                ],
-            ],
-        ]);
+        $cacheKey = 'safe_browsing:' . md5($url);
+
+        try {
+            $cached = Cache::store('file')->get($cacheKey);
+            if ($cached !== null) {
+                return (bool) $cached;
+            }
+        } catch (Throwable $e) {
+            // Se o cache em arquivo falhar, segue com a verificação normal
+        }
+
+        try {
+            $response = Http::connectTimeout(2)
+                ->timeout(3)
+                ->withOptions([
+                    'curl' => [
+                        CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                    ],
+                ])
+                ->post($this->apiUrl . '?key=' . $apiKey, [
+                    'client' => [
+                        'clientId'      => 'barrier-free',
+                        'clientVersion' => '1.0.0',
+                    ],
+                    'threatInfo' => [
+                        'threatTypes'      => [
+                            'MALWARE',
+                            'SOCIAL_ENGINEERING',
+                            'UNWANTED_SOFTWARE',
+                            'POTENTIALLY_HARMFUL_APPLICATION',
+                        ],
+                        'platformTypes'    => ['ANY_PLATFORM'],
+                        'threatEntryTypes' => ['URL'],
+                        'threatEntries'    => [
+                            ['url' => $url],
+                        ],
+                    ],
+                ]);
+        } catch (Throwable $e) {
+            Log::warning('Google Safe Browsing timeout ou erro de conexão, liberando URL por fallback', [
+                'url'   => $url,
+                'error' => $e->getMessage(),
+            ]);
+            return true;
+        }
 
         if ($response->failed()) {
             Log::error('Google Safe Browsing API falhou', ['status' => $response->status(), 'response' => $response->body()]);
@@ -55,10 +83,14 @@ class SafeBrowsingService
         $data = $response->json();
 
         // Se o array 'matches' estiver presente, significa que a URL foi encontrada nas listas de ameaças
-        if (isset($data['matches']) && count($data['matches']) > 0) {
-            return false;
+        $isSafe = !(isset($data['matches']) && count($data['matches']) > 0);
+
+        try {
+            Cache::store('file')->put($cacheKey, $isSafe, 3600);
+        } catch (Throwable $e) {
+            // Ignorar falha de gravação de cache
         }
 
-        return true;
+        return $isSafe;
     }
 }
