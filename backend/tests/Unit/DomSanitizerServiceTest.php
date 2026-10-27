@@ -169,6 +169,46 @@ class DomSanitizerServiceTest extends TestCase
         $this->assertStringContainsString('[Botão enviar: Cadastrar]', $result);
     }
 
+    public function test_campo_usa_label_for_e_valor_atual(): void
+    {
+        $html = '
+        <label for="valor">Valor</label>
+        <input id="valor" type="text" value="1,00">
+        <label for="de">Converter de</label>
+        <select id="de">
+            <option>Dólar (USD)</option>
+            <option selected>Real (BRL)</option>
+        </select>';
+        $result = $this->sanitizer->sanitize($html);
+
+        $this->assertStringContainsString('[Campo texto: Valor | valor atual: 1,00]', $result);
+        $this->assertStringContainsString('[Campo seleção: Converter de | valor atual: Real (BRL)', $result);
+    }
+
+    public function test_select_lista_todas_as_opcoes_ate_o_limite(): void
+    {
+        $options = '';
+        for ($i = 1; $i <= 40; $i++) {
+            $options .= "<option>Moeda {$i}</option>";
+        }
+        $options .= '<option>Euro (EUR)</option>';
+        $result = $this->sanitizer->sanitize("<select aria-label=\"Para\">{$options}</select>");
+
+        $this->assertStringContainsString('41 opções', $result);
+        $this->assertStringContainsString('Euro (EUR)', $result);
+    }
+
+    public function test_nao_expoe_valor_de_senha_nem_cartao(): void
+    {
+        $html = '<input type="password" aria-label="Senha" value="segredo123">'
+            . '<input type="text" autocomplete="cc-number" aria-label="Cartão" value="4111111111111111">';
+        $result = $this->sanitizer->sanitize($html);
+
+        $this->assertStringNotContainsString('segredo123', $result);
+        $this->assertStringNotContainsString('4111111111111111', $result);
+    }
+
+
     // ==============================
     // Preservação de headings
     // ==============================

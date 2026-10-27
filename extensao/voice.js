@@ -19,6 +19,7 @@ if (!SpeechRecognition) {
   let isListening = false;
   let isProcessing = false; // Trava escuta enquanto aguarda resposta da API
   let accumulatedTranscript = ''; // Variável para acumular fala até o usuário dar um comando
+  let lastAccumulatedAt = 0; // Timestamp da última fala acumulada (para expirar falas antigas)
 
   // --- Efeitos sonoros via Web Audio API ---
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -100,12 +101,38 @@ if (!SpeechRecognition) {
     'resumir', 'resumo',
     'orientar', 'ajudar', 'orientação', 'ajuda',
     'buscar', 'pesquisar', 'procurar',
-    'abrir', 'navegar',
+    'abrir', 'navegar', 'ir para', 'ir ao',
+    'repetir',
     'comandos',
   ];
 
   function isValidCommand(text) {
     return COMMAND_KEYWORDS.some(keyword => text.includes(keyword));
+  }
+
+  // Verifica se a frase atual já é um comando completo por si só (ex: "abrir notícias", "resumir").
+  // Caso o usuário tenha dito apenas a palavra-chave isolada (ex: disse "valor do euro" e depois só "navegar"),
+  // retorna false para aproveitar o texto acumulado anteriormente.
+  function isSelfContainedCommand(lowerText) {
+    const standaloneKeywords = ['resumir', 'resumo', 'orientar', 'ajudar', 'orientação', 'ajuda', 'comandos', 'repetir'];
+    if (standaloneKeywords.some(k => lowerText.includes(k))) {
+      return true;
+    }
+
+    const targetKeywords = ['abrir', 'navegar', 'ir para', 'ir ao', 'buscar', 'pesquisar', 'procurar'];
+    for (const kw of targetKeywords) {
+      if (lowerText.includes(kw)) {
+        const remainder = lowerText
+          .replace(kw, ' ')
+          .replace(/\b(para|ao|a|o|os|as|de|do|da|no|na|em|por|favor|site|pagina|página|link|opção|opcao)\b/g, ' ')
+          .trim();
+        if (remainder.length >= 2) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   recognition.onresult = (event) => {
@@ -119,15 +146,30 @@ if (!SpeechRecognition) {
       const transcript = lastResult[0].transcript.trim();
       if (!transcript) return;
 
-      // Acumula o que o usuário disse para que o contexto antes do comando não se perca
-      accumulatedTranscript = accumulatedTranscript ? accumulatedTranscript + ' ' + transcript : transcript;
-      const lowerCaseAccumulated = accumulatedTranscript.toLowerCase();
+      const now = Date.now();
+      const lowerTranscript = transcript.toLowerCase();
+
+      // Expirar fala acumulada antiga (> 10 segundos) para não poluir novos comandos
+      if (accumulatedTranscript && (now - lastAccumulatedAt > 10000)) {
+        accumulatedTranscript = '';
+      }
 
       // Exibir apenas a nova frase no transcript
       const entry = document.createElement('div');
       entry.textContent = `» ${transcript}`;
       transcriptDiv.appendChild(entry);
       transcriptDiv.scrollTop = transcriptDiv.scrollHeight;
+
+      // Se a nova frase já é um comando completo (ex: o usuário disse "notícias" antes e agora disse "abrir notícias"),
+      // usa apenas a nova frase limpa sem duplicar o termo anterior.
+      if (isValidCommand(lowerTranscript) && isSelfContainedCommand(lowerTranscript)) {
+        accumulatedTranscript = lowerTranscript;
+      } else {
+        accumulatedTranscript = accumulatedTranscript ? accumulatedTranscript + ' ' + transcript : transcript;
+      }
+      lastAccumulatedAt = now;
+
+      const lowerCaseAccumulated = accumulatedTranscript.toLowerCase();
 
       // Verificar se a frase acumulada possui uma palavra-chave
       if (!isValidCommand(lowerCaseAccumulated)) {
@@ -155,11 +197,17 @@ if (!SpeechRecognition) {
 
       // Limpar o acumulador para as próximas falas
       accumulatedTranscript = '';
+      lastAccumulatedAt = 0;
     }
   };
 
   recognition.onerror = (event) => {
-    console.error('Erro no reconhecimento de voz:', event.error);
+    // "no-speech" e "aborted" são esperados na escuta contínua: não registrar como erro da extensão
+    if (event.error === 'no-speech' || event.error === 'aborted') {
+      console.debug('Reconhecimento de voz:', event.error);
+    } else {
+      console.error('Erro no reconhecimento de voz:', event.error);
+    }
 
     if (event.error === 'not-allowed') {
       statusDiv.textContent = 'Permissão de microfone negada';
@@ -263,19 +311,15 @@ if (!SpeechRecognition) {
         entry.style.color = '#81C784';
 
         if (request.ai_response) {
-          // Resposta da IA — exibir e ler em voz alta
+          // Resposta da IA — exibir e ler em voz alta.
+          // Para buscas, o texto já traz a lista numerada de opções (uma por linha): a tela mostra exatamente
+          // o que é falado, usando o mesmo vocabulário ("opção"), sem uma segunda lista de "fontes".
           entry.textContent = request.ai_response;
+          entry.style.whiteSpace = 'pre-line';
           statusDiv.textContent = 'Lendo resposta...';
           statusDiv.className = 'processing';
 
-          let spokenText = request.ai_response;
-          if (request.search_sources && request.search_sources.length > 0) {
-            // Exibir fontes numeradas no transcript para referência visual
-            const sourcesEntry = document.createElement('div');
-            sourcesEntry.style.color = '#64B5F6';
-            sourcesEntry.textContent = '🔗 Fontes: ' + request.search_sources.map((s, i) => `${i + 1}. ${s.title}`).join(' | ');
-            transcriptDiv.appendChild(sourcesEntry);
-          }
+          const spokenText = request.ai_response;
 
           // speakResponse já cuida de retomar a escuta ao terminar de falar
           speakResponse(spokenText);

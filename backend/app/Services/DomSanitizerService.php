@@ -44,6 +44,22 @@ class DomSanitizerService
     protected int $maxLength = 30000;
 
     /**
+     * Número máximo de opções de um <select> enviadas à IA.
+     * Listas como moedas ou países têm dezenas de itens; limitar a poucos fazia a IA
+     * concluir erroneamente que uma opção (ex: Euro) não existia.
+     */
+    protected int $maxSelectOptions = 200;
+
+    /**
+     * Mapa id do campo => texto do <label for="id"> da página atual.
+     *
+     * @var array<string, string>
+     */
+    protected array $labelMap = [];
+
+    protected ?DOMDocument $currentDom = null;
+
+    /**
      * Sanitiza o conteúdo HTML removendo elementos irrelevantes e perigosos,
      * preservando estrutura semântica e atributos de acessibilidade
      * em um formato textual estruturado para a IA.
@@ -64,6 +80,10 @@ class DomSanitizerService
 
         // 2. Remover elementos ocultos (hidden, display:none, aria-hidden)
         $this->removeHiddenElements($dom);
+
+        // 2.1 Indexar os <label for="..."> para nomear corretamente os campos de formulário
+        $this->currentDom = $dom;
+        $this->buildLabelMap($dom);
 
         // 3. Converter o DOM limpo em texto estruturado com marcadores
         $body = $dom->getElementsByTagName('body')->item(0);
@@ -328,15 +348,12 @@ class DomSanitizerService
 
     /**
      * Converte campos de formulário (input, textarea, select) em marcadores.
+     * Inclui nome acessível (label), valor atual, estado e, para listas, as opções.
      */
     protected function convertFormField(DOMNode $node): string
     {
         $tagName = strtolower($node->nodeName);
-        $type = $node->getAttribute('type') ?: 'text';
-        $ariaLabel = $node->getAttribute('aria-label') ?? '';
-        $placeholder = $node->getAttribute('placeholder') ?? '';
-        $title = $node->getAttribute('title') ?? '';
-        $name = $node->getAttribute('name') ?? '';
+        $type = strtolower($node->getAttribute('type') ?: 'text');
         $value = $node->getAttribute('value') ?? '';
 
         // Ignorar campos hidden
@@ -344,22 +361,53 @@ class DomSanitizerService
             return '';
         }
 
-        $label = trim($ariaLabel ?: $placeholder ?: $title ?: $name);
+        $label = $this->resolveFieldLabel($node);
+        $flags = $this->fieldStateFlags($node);
 
         if ($tagName === 'select') {
             $options = [];
+            $selected = [];
             foreach ($node->getElementsByTagName('option') as $option) {
-                $optText = trim($option->textContent);
-                if (!empty($optText)) {
-                    $options[] = $optText;
+                $optText = trim(preg_replace('/\s+/', ' ', $option->textContent) ?? '');
+                if ($optText === '') {
+                    continue;
+                }
+                if (mb_strlen($optText) > 60) {
+                    $optText = mb_substr($optText, 0, 57) . '...';
+                }
+                $options[] = $optText;
+                if ($option->hasAttribute('selected')) {
+                    $selected[] = $optText;
                 }
             }
-            $optionsStr = !empty($options) ? ' (opções: ' . implode(', ', array_slice($options, 0, 10)) . ')' : '';
-            return " [Campo seleção: {$label}{$optionsStr}] ";
+
+            // Sem opção marcada, o navegador seleciona a primeira (select simples)
+            if (empty($selected) && !$node->hasAttribute('multiple') && !empty($options)) {
+                $selected[] = $options[0];
+            }
+
+            $details = [];
+            if (!empty($selected)) {
+                $details[] = 'valor atual: ' . implode(', ', $selected);
+            }
+            if (!empty($options)) {
+                $total = count($options);
+                $shown = array_slice($options, 0, $this->maxSelectOptions);
+                $more = $total > count($shown) ? ' e mais ' . ($total - count($shown)) . ' opções' : '';
+                $details[] = "{$total} opções: " . implode('; ', $shown) . $more;
+            }
+            $details = array_merge($details, $flags);
+            $detailsStr = !empty($details) ? ' | ' . implode(' | ', $details) : '';
+
+            return " [Campo seleção: {$label}{$detailsStr}] ";
         }
 
         if ($tagName === 'textarea') {
-            return " [Campo texto longo: {$label}] ";
+            $current = trim($node->textContent);
+            $details = $current !== '' ? ['valor atual: ' . mb_substr($current, 0, 200)] : [];
+            $details = array_merge($details, $flags);
+            $detailsStr = !empty($details) ? ' | ' . implode(' | ', $details) : '';
+            return " [Campo texto longo: {$label}{$detailsStr}] ";
         }
 
         // Input types
@@ -390,7 +438,126 @@ class DomSanitizerService
             $label = $type === 'submit' ? 'Enviar' : 'Limpar';
         }
 
-        return " [{$typeLabel}: {$label}] ";
+        $details = [];
+        // Valor atual: nunca expor senhas nem arquivos; checkbox/radio usam estado marcado
+        if (in_array($type, ['checkbox', 'radio'], true)) {
+            $details[] = $node->hasAttribute('checked') ? 'marcado' : 'desmarcado';
+        } elseif (!in_array($type, ['submit', 'reset', 'button', 'image', 'password', 'file'], true)
+            && trim($value) !== ''
+            && !$this->isSensitiveAutocomplete($node)
+        ) {
+            $details[] = 'valor atual: ' . mb_substr(trim($value), 0, 100);
+        }
+        $details = array_merge($details, $flags);
+        $detailsStr = !empty($details) ? ' | ' . implode(' | ', $details) : '';
+
+        return " [{$typeLabel}: {$label}{$detailsStr}] ";
+    }
+
+    /**
+     * Indexa todos os <label for="id"> do documento (texto limpo) para consulta rápida.
+     */
+    protected function buildLabelMap(DOMDocument $dom): void
+    {
+        $this->labelMap = [];
+        $xpath = new DOMXPath($dom);
+        foreach ($xpath->query('//label[@for]') as $labelNode) {
+            $for = trim($labelNode->getAttribute('for'));
+            $text = $this->cleanInlineText($labelNode->textContent);
+            if ($for !== '' && $text !== '' && !isset($this->labelMap[$for])) {
+                $this->labelMap[$for] = $text;
+            }
+        }
+    }
+
+    /**
+     * Descobre o nome acessível de um campo, na ordem:
+     * aria-label, aria-labelledby, <label for>, <label> ancestral, title, placeholder, name.
+     */
+    protected function resolveFieldLabel(DOMNode $node): string
+    {
+        $ariaLabel = trim($node->getAttribute('aria-label') ?? '');
+        if ($ariaLabel !== '') {
+            return $ariaLabel;
+        }
+
+        $labelledBy = trim($node->getAttribute('aria-labelledby') ?? '');
+        if ($labelledBy !== '' && $this->currentDom) {
+            $parts = [];
+            foreach (preg_split('/\s+/', $labelledBy) ?: [] as $id) {
+                $ref = $this->currentDom->getElementById($id);
+                if ($ref) {
+                    $t = $this->cleanInlineText($ref->textContent);
+                    if ($t !== '') {
+                        $parts[] = $t;
+                    }
+                }
+            }
+            if (!empty($parts)) {
+                return implode(' ', $parts);
+            }
+        }
+
+        $id = trim($node->getAttribute('id') ?? '');
+        if ($id !== '' && isset($this->labelMap[$id])) {
+            return $this->labelMap[$id];
+        }
+
+        // <label> que envolve o campo
+        $parent = $node->parentNode;
+        while ($parent && $parent->nodeType === XML_ELEMENT_NODE) {
+            if (strtolower($parent->nodeName) === 'label') {
+                $t = $this->cleanInlineText($parent->textContent);
+                if ($t !== '') {
+                    return $t;
+                }
+                break;
+            }
+            $parent = $parent->parentNode;
+        }
+
+        foreach (['title', 'placeholder', 'name'] as $attr) {
+            $v = trim($node->getAttribute($attr) ?? '');
+            if ($v !== '') {
+                return $v;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Estados relevantes do campo para quem não enxerga a tela.
+     *
+     * @return string[]
+     */
+    protected function fieldStateFlags(DOMNode $node): array
+    {
+        $flags = [];
+        if ($node->hasAttribute('required') || strtolower($node->getAttribute('aria-required') ?? '') === 'true') {
+            $flags[] = 'obrigatório';
+        }
+        if ($node->hasAttribute('disabled')) {
+            $flags[] = 'desabilitado';
+        }
+        if ($node->hasAttribute('readonly')) {
+            $flags[] = 'somente leitura';
+        }
+        return $flags;
+    }
+
+    /**
+     * Campos de pagamento/código único não devem ter o valor enviado à IA.
+     */
+    protected function isSensitiveAutocomplete(DOMNode $node): bool
+    {
+        $auto = strtolower($node->getAttribute('autocomplete') ?? '');
+        return str_starts_with($auto, 'cc-') || $auto === 'one-time-code';
+    }
+
+    protected function cleanInlineText(string $text): string
+    {
+        return trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
     }
 
     /**

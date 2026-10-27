@@ -26,14 +26,14 @@ class ProcessDomAction
         $aiCommands = ['resumir', 'orientar', 'buscar'];
 
         if (in_array($command, $aiCommands)) {
-            $aiResult = $this->geminiService->analyze($htmlContent, $command, $url, $userPrompt);
-
-            // Extrair links navegáveis da página para os comandos que analisam o DOM.
-            // O comando "buscar" não analisa o DOM da página atual, então não extrai links.
+            // Extrair links navegáveis da página antes de chamar a IA para que o Gemini
+            // saiba exatamente quais opções de links/sites estão disponíveis para o comando "abrir".
             $pageLinks = null;
             if (in_array($command, ['resumir', 'orientar']) && !empty($htmlContent) && !empty($url)) {
                 $pageLinks = $this->linkExtractor->extract($htmlContent, $url);
             }
+
+            $aiResult = $this->geminiService->analyze($htmlContent, $command, $url, $userPrompt, $pageLinks);
 
             return [
                 'analyzed_url'   => $url ?? 'unknown',

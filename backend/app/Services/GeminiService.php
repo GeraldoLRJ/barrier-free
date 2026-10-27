@@ -31,20 +31,25 @@ PROMPT;
      * Prompts específicos para cada comando de voz.
      */
     protected array $commandPrompts = [
-        'resumir' => 'Faça um resumo do conteúdo principal desta página para uma pessoa cega que está ouvindo a resposta em voz alta. Por padrão, seja breve e direto: use entre 3 e 5 frases naturais que cubram o essencial. Em seguida, se houver seções ou links de conteúdo que o usuário possa acessar a partir desta página (por exemplo, áreas de um site como Notícias, Fórum ou Games, inclusive os atalhos que aparecem abaixo de um resultado de busca), cite até 5 deles pelo nome e diga que ele pode dizer "abrir" seguido do nome para acessá-los. Ignore controles genéricos como login, filtros, configurações e menus do próprio buscador. Se o usuário tiver pedido explicitamente uma explicação mais detalhada (como "explique mais" ou "mais detalhes"), então aprofunde o resumo com mais informações relevantes. Nunca corte a resposta no meio — sempre conclua o pensamento.',
+        'resumir' => 'Faça um resumo do conteúdo principal desta página para uma pessoa cega que está ouvindo a resposta em voz alta. Por padrão, seja breve e direto: use entre 3 e 5 frases naturais que cubram o essencial. Em seguida, cite até 5 opções de links ou sites disponíveis na lista de "Links navegáveis disponíveis" abaixo e diga claramente que o usuário pode dizer "abrir" seguido do nome exato da opção para acessá-la. Se a página for de resultados de busca (como Google), recomende para o comando "abrir" os sites encontrados nos resultados (como Wise, Banco Central do Brasil, UOL Economia, etc.) e NUNCA recomende abas ou filtros do próprio buscador (como Modo IA, Imagens, Shopping, Vídeos, Notícias ou Finanças do Google). Se for um portal ou site comum, recomende as principais seções ou matérias do site. Se o usuário tiver pedido explicitamente uma explicação mais detalhada (como "explique mais" ou "mais detalhes"), aprofunde o resumo. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
-        'orientar' => 'Oriente uma pessoa cega sobre como navegar e usar esta página, como se estivesse explicando pelo telefone. Priorize os destinos de conteúdo que ela pode acessar: cite pelo nome as principais seções e links relevantes (por exemplo, áreas de um site como Notícias, Fórum ou Tech, inclusive os atalhos que aparecem abaixo de um resultado de busca), e diga que ela pode dizer "abrir" seguido do nome para ir até eles. Mencione campos, botões e filtros genéricos da página apenas brevemente, depois dos destinos de conteúdo. Por padrão, seja objetivo, em até 6 frases. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
+        'orientar' => 'Oriente uma pessoa cega sobre esta página, como se estivesse explicando pelo telefone. Siga esta ordem de prioridade. Primeiro: se a instrução do usuário contiver uma pergunta ou dúvida (por exemplo, "existe o campo para converter real para euro?"), responda a ela logo no início, de forma direta: diga se o elemento existe, qual o nome dele e como usá-lo. Quando for uma lista de opções, confira a lista completa de opções do campo antes de afirmar que uma opção existe ou não. Ignore a palavra "orientar" ou "ajuda" na fala, ela é só o comando. Segundo: explique em uma frase a finalidade da página e o estado atual dela, citando valores e resultados reais exibidos no conteúdo, como um resultado de cálculo já mostrado. Terceiro: se a página tiver formulário ou ferramenta, descreva os campos na ordem de uso, com o nome de cada um (use o rótulo), o tipo (campo de texto, lista de seleção, caixa de marcação, etc.), o valor atual quando houver, até o botão que executa a ação e onde o resultado aparece. Se um campo de seleção aparecer junto de um botão com o mesmo texto do valor atual, é o mesmo controle (lista suspensa personalizada): descreva-o uma única vez. Diga que o preenchimento é feito pelo teclado, usando a tecla Tab para chegar ao campo. Quarto, e só no final: se for útil, cite até 3 opções da lista de "Links navegáveis disponíveis" abaixo, dizendo que ela pode dizer "abrir" seguido do nome. Se for uma página de resultados de busca (como Google), em vez disso indique os sites dos resultados principais para o comando "abrir" e NUNCA recomende abas do próprio buscador (como Modo IA, Imagens, Shopping ou Vídeos). Por padrão, seja objetivo, em até 8 frases curtas. Não use numeração na resposta; fale de forma natural. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
-        'buscar' => 'O usuário fez uma busca por voz e os resultados estão abaixo. Primeiro, responda a dúvida do usuário em no máximo 2 frases diretas, com base nos resultados. Em seguida, liste obrigatoriamente o título de todas as fontes fornecidas na ordem exata, dizendo "Fonte um:" seguido do título, "Fonte dois:" seguido do título, e assim por diante até a última fonte (adapte os títulos para leitura fluida em voz alta, sem barras verticais ou símbolos visuais). Por fim, diga que o usuário pode dizer "abrir fonte um", "abrir fonte dois", até a última fonte, para navegar.',
+        'buscar' => 'O usuário fez uma busca por voz e os trechos dos resultados estão abaixo. Responda a dúvida do usuário em NO MÁXIMO 2 frases diretas, com base nesses trechos. NÃO cite nomes de sites, empresas, portais, títulos dos resultados nem números de opção, e NÃO explique como abrir links: a lista de opções e as instruções serão anunciadas separadamente pelo sistema logo após a sua resposta. Se os trechos não forem suficientes, diga isso em uma frase curta.',
     ];
 
     protected DomSanitizerService $sanitizer;
     protected BraveSearchService $braveSearch;
+    protected SearchSpeechFormatter $speechFormatter;
 
-    public function __construct(DomSanitizerService $sanitizer, BraveSearchService $braveSearch)
-    {
-        $this->sanitizer    = $sanitizer;
-        $this->braveSearch  = $braveSearch;
+    public function __construct(
+        DomSanitizerService $sanitizer,
+        BraveSearchService $braveSearch,
+        ?SearchSpeechFormatter $speechFormatter = null
+    ) {
+        $this->sanitizer       = $sanitizer;
+        $this->braveSearch     = $braveSearch;
+        $this->speechFormatter = $speechFormatter ?? new SearchSpeechFormatter();
     }
 
     /**
@@ -53,9 +58,11 @@ PROMPT;
      * @param string $htmlContent Conteúdo HTML bruto da página
      * @param string $command Comando de voz (resumir, explicar, orientar)
      * @param string|null $url URL da página analisada
+     * @param string|null $userPrompt Texto falado pelo usuário
+     * @param array<int, array{text: string, url: string}>|null $pageLinks Links navegáveis extraídos da página
      * @return array{text: string, search_sources: array|null} Resposta textual e fontes de pesquisa (quando disponíveis)
      */
-    public function analyze(string $htmlContent, string $command, ?string $url = null, ?string $userPrompt = null): array
+    public function analyze(string $htmlContent, string $command, ?string $url = null, ?string $userPrompt = null, ?array $pageLinks = null): array
     {
         $apiKey = config('services.gemini.key');
         $model = config('services.gemini.model', 'gemini-2.0-flash');
@@ -80,7 +87,7 @@ PROMPT;
 
             $braveResults  = $this->braveSearch->search($searchQuery);
             $searchSources = !empty($braveResults)
-                ? array_map(fn($r) => ['title' => $r['title'], 'url' => $r['url']], $braveResults)
+                ? $this->speechFormatter->buildSources($braveResults)
                 : null;
         }
 
@@ -98,13 +105,12 @@ PROMPT;
         // Montar bloco de resultados da Brave Search (apenas para comando buscar)
         $braveContext = '';
         if ($command === 'buscar' && !empty($braveResults)) {
-            $totalSources = count($braveResults);
-            $braveContext = "Resultados de busca ({$totalSources} fontes encontradas — após responder à pergunta, você DEVE anunciar o título de todas as {$totalSources} fontes exatamente nesta ordem numérica):\n";
+            $braveContext = "Trechos dos resultados de busca (use apenas para embasar a resposta curta; NÃO cite os títulos nem os sites):\n";
             foreach ($braveResults as $index => $result) {
                 $num = $index + 1;
-                $braveContext .= "Fonte {$num} (Título da fonte a ser anunciado): {$result['title']}\n";
+                $braveContext .= "Trecho {$num} — {$result['title']}\n";
                 if (!empty($result['description'])) {
-                    $braveContext .= "Trecho de conteúdo da Fonte {$num}: {$result['description']}\n";
+                    $braveContext .= "{$result['description']}\n";
                 }
                 $braveContext .= "\n";
             }
@@ -112,7 +118,18 @@ PROMPT;
             $braveContext = "Não foi possível obter resultados de busca externos. Responda com base no seu conhecimento, deixando claro que não há fontes verificadas disponíveis no momento.\n\n";
         }
 
-        $finalPrompt = "{$baseCommandPrompt}\n\n{$userInstruction}{$braveContext}{$urlContext}Conteúdo da página (contexto adicional):\n{$sanitizedHtml}";
+        // Montar bloco de links navegáveis extraídos da página (para comandos resumir e orientar)
+        $linksContext = '';
+        if (in_array($command, ['resumir', 'orientar'], true) && !empty($pageLinks)) {
+            $topLinks = array_slice($pageLinks, 0, 25);
+            $linksContext = "Links navegáveis disponíveis para o comando \"abrir\" (ao sugerir opções para o usuário abrir, escolha entre estas opções para que o comando de voz funcione exatamente):\n";
+            foreach ($topLinks as $link) {
+                $linksContext .= "- {$link['text']}\n";
+            }
+            $linksContext .= "\n";
+        }
+
+        $finalPrompt = "{$baseCommandPrompt}\n\n{$userInstruction}{$braveContext}{$urlContext}{$linksContext}Conteúdo da página (contexto adicional):\n{$sanitizedHtml}";
 
         // Chamar a API do Gemini
 
@@ -243,7 +260,13 @@ PROMPT;
         $text = strip_tags($text);
         $text = trim($text);
 
-        // As search_sources já foram montadas antes da chamada ao Gemini (vindas da Brave Search)
+        // As search_sources já foram montadas antes da chamada ao Gemini (vindas da Brave Search).
+        // Para buscas, a lista numerada de opções e a instrução de como abrir são anexadas por código
+        // (nunca pelo modelo), garantindo que a fala cite somente opções realmente abríveis.
+        if ($command === 'buscar' && !empty($searchSources)) {
+            $text = $this->speechFormatter->buildSpeech($text, $searchSources);
+        }
+
         return [
             'text'           => $text,
             'search_sources' => $searchSources,
