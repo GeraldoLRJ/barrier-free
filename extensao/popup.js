@@ -1,13 +1,3 @@
-// --- Controle do Analisador IA ---
-document.getElementById('aiAnalyzeBtn').addEventListener('click', () => {
-  const statusDiv = document.getElementById('status');
-  statusDiv.textContent = "Enviando para resumo da IA...";
-  
-  chrome.runtime.sendMessage({
-    action: 'summarizeDom'
-  });
-});
-
 // --- Controle do Comando de Voz ---
 const voiceBtn = document.getElementById('voiceBtn');
 let isVoiceEnabled = false;

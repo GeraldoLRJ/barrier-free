@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
   <meta charset="UTF-8">
   <title>Barrier Free - Comando de Voz</title>
@@ -77,8 +78,17 @@
     }
 
     @keyframes pulse-processing {
-      0%, 100% { box-shadow: 0 0 10px rgba(255, 152, 0, 0.3); transform: scale(1); }
-      50% { box-shadow: 0 0 25px rgba(255, 152, 0, 0.6); transform: scale(1.03); }
+
+      0%,
+      100% {
+        box-shadow: 0 0 10px rgba(255, 152, 0, 0.3);
+        transform: scale(1);
+      }
+
+      50% {
+        box-shadow: 0 0 25px rgba(255, 152, 0, 0.6);
+        transform: scale(1.03);
+      }
     }
 
     .pulse-ring {
@@ -99,13 +109,27 @@
     }
 
     @keyframes pulse-ring {
-      0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
-      100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+      0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+      }
+
+      100% {
+        transform: translate(-50%, -50%) scale(1.6);
+        opacity: 0;
+      }
     }
 
     @keyframes pulse-btn {
-      0%, 100% { box-shadow: 0 0 10px rgba(244, 67, 54, 0.3); }
-      50% { box-shadow: 0 0 25px rgba(244, 67, 54, 0.6); }
+
+      0%,
+      100% {
+        box-shadow: 0 0 10px rgba(244, 67, 54, 0.3);
+      }
+
+      50% {
+        box-shadow: 0 0 25px rgba(244, 67, 54, 0.6);
+      }
     }
 
     #status {
@@ -115,10 +139,21 @@
       min-height: 20px;
     }
 
-    #status.ready { color: #4CAF50; }
-    #status.listening { color: #f44336; }
-    #status.processing { color: #FF9800; }
-    #status.error { color: #f44336; }
+    #status.ready {
+      color: #4CAF50;
+    }
+
+    #status.listening {
+      color: #f44336;
+    }
+
+    #status.processing {
+      color: #FF9800;
+    }
+
+    #status.error {
+      color: #f44336;
+    }
 
     #transcript {
       background: rgba(255, 255, 255, 0.05);
@@ -157,6 +192,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <h2>🎙️ Comando de Voz</h2>
@@ -171,9 +207,11 @@
   <div id="transcript"></div>
 
   <div class="commands-hint">
-    Comandos: <span>resumir</span> <span>orientar</span> <span>buscar</span>
+    Comandos: <span>resumir</span> <span>orientar</span> <span>buscar</span> <span>navegar</span> <span>comandos</span>
+    <span>repetir</span>
   </div>
 
   <script src="voice.js"></script>
 </body>
+
 </html>

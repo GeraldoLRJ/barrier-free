@@ -166,7 +166,7 @@ function matchSourceBySite(cmd, sources) {
         let hostTokens = [];
         try {
             hostTokens = new URL(source.url).hostname.toLowerCase().split(/[.\-]/).filter(t => t.length >= 2 && !ignoredLabels.has(t));
-        } catch {}
+        } catch { }
         const siteTokens = new Set([
             ...normalizeSpeech(source.site_name || '').replace(/[^\w\s]/g, ' ').split(/\s+/).filter(t => t.length >= 2),
             ...hostTokens
@@ -517,7 +517,7 @@ async function findLinkInActiveTabDom(cmd) {
                         let linkHost = '';
                         try {
                             linkHost = new URL(absUrl).hostname.toLowerCase();
-                        } catch {}
+                        } catch { }
 
                         if (isSearchPage && linkHost && (linkHost === location.hostname.toLowerCase() || linkHost.includes('google.'))) {
                             internalLinks.push(item);
@@ -688,7 +688,7 @@ function openVoiceWindow() {
         chrome.windows.create({
             url: 'voice.html',
             type: 'popup',
-            width: 450,
+            width: 600,
             height: 400
         }, (win) => {
             voiceWindowId = win.id;
@@ -708,10 +708,6 @@ function closeVoiceWindow() {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "sendDom") {
         handleSendDomRequest(request);
-    }
-
-    if (request.action === "summarizeDom") {
-        captureCurrentTabDom('resumir');
     }
 
     if (request.action === "toggleVoice") {
@@ -839,7 +835,7 @@ function findBestPageLink(cmd, links, currentPageUrl = null) {
     if (currentPageUrl) {
         try {
             baseHost = new URL(currentPageUrl).hostname.toLowerCase();
-        } catch {}
+        } catch { }
     }
 
     const targetClause = extractTargetClause(cmd);
