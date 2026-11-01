@@ -648,19 +648,22 @@ function handleSendDomRequest(request) {
             const searchSources = data.data?.search_sources || null;
             const pageLinks = data.data?.page_links || null;
 
-            if (searchSources && searchSources.length > 0) {
+            const hasSources = searchSources && searchSources.length > 0;
+            const hasPageLinks = pageLinks && pageLinks.length > 0;
+
+            if (hasSources) {
                 await setState({ searchSources });
-                await clearState(['pageLinks']);
-            } else if (request.data && request.data.command === 'buscar') {
-                // Busca sem resultados: descarta opções antigas para não abrir algo de outra busca
+            } else {
+                // Sem opções novas: descarta as antigas para não abrir algo de outra busca/página
                 await clearState(['searchSources']);
             }
 
-            // Salvar links da página para permitir navegação contextual por voz
-            // e limpar opções de busca antigas para que não interfiram no comando "abrir"
-            if (pageLinks && pageLinks.length > 0) {
+            // Links da página (resumir/orientar) permitem navegação contextual por nome ("abrir notícias");
+            // as opções numeradas (buscar, resumir, orientar) permitem "abrir opção N".
+            if (hasPageLinks) {
                 await setState({ pageLinks });
-                await clearState(['searchSources']);
+            } else if (hasSources) {
+                await clearState(['pageLinks']);
             }
 
             safeSendMessage({

@@ -31,9 +31,9 @@ PROMPT;
      * Prompts específicos para cada comando de voz.
      */
     protected array $commandPrompts = [
-        'resumir' => 'Faça um resumo do conteúdo principal desta página para uma pessoa cega que está ouvindo a resposta em voz alta. Por padrão, seja breve e direto: use entre 3 e 5 frases naturais que cubram o essencial. Em seguida, cite até 5 opções de links ou sites disponíveis na lista de "Links navegáveis disponíveis" abaixo e diga claramente que o usuário pode dizer "abrir" seguido do nome exato da opção para acessá-la. Se a página for de resultados de busca (como Google), recomende para o comando "abrir" os sites encontrados nos resultados (como Wise, Banco Central do Brasil, UOL Economia, etc.) e NUNCA recomende abas ou filtros do próprio buscador (como Modo IA, Imagens, Shopping, Vídeos, Notícias ou Finanças do Google). Se for um portal ou site comum, recomende as principais seções ou matérias do site. Se o usuário tiver pedido explicitamente uma explicação mais detalhada (como "explique mais" ou "mais detalhes"), aprofunde o resumo. Nunca corte a resposta no meio — sempre conclua o pensamento.',
+        'resumir' => 'Faça um resumo do conteúdo principal desta página para uma pessoa cega que está ouvindo a resposta em voz alta. Por padrão, seja breve e direto: use entre 3 e 5 frases naturais que cubram o essencial. NÃO cite nomes de links, sites ou opções no texto e NÃO explique como abrir: a lista numerada de opções e as instruções serão anunciadas separadamente pelo sistema logo após a sua resposta. Em vez disso, na ÚLTIMA linha da resposta escreva exatamente "OPCOES: " seguido dos números (separados por vírgula, no máximo 5, do mais ao menos relevante) dos itens da lista "Links navegáveis disponíveis" que valem a pena abrir, ou "OPCOES: nenhuma". Se a página for de resultados de busca (como Google), escolha os sites dos resultados e NUNCA abas ou filtros do próprio buscador (como Modo IA, Imagens, Shopping, Vídeos, Notícias ou Finanças do Google). Se for um portal ou site comum, escolha as principais seções ou matérias do site. Se o usuário tiver pedido explicitamente uma explicação mais detalhada (como "explique mais" ou "mais detalhes"), aprofunde o resumo. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
-        'orientar' => 'Oriente uma pessoa cega sobre esta página, como se estivesse explicando pelo telefone. Siga esta ordem de prioridade. Primeiro: se a instrução do usuário contiver uma pergunta ou dúvida (por exemplo, "existe o campo para converter real para euro?"), responda a ela logo no início, de forma direta: diga se o elemento existe, qual o nome dele e como usá-lo. Quando for uma lista de opções, confira a lista completa de opções do campo antes de afirmar que uma opção existe ou não. Ignore a palavra "orientar" ou "ajuda" na fala, ela é só o comando. Segundo: explique em uma frase a finalidade da página e o estado atual dela, citando valores e resultados reais exibidos no conteúdo, como um resultado de cálculo já mostrado. Terceiro: se a página tiver formulário ou ferramenta, descreva os campos na ordem de uso, com o nome de cada um (use o rótulo), o tipo (campo de texto, lista de seleção, caixa de marcação, etc.), o valor atual quando houver, até o botão que executa a ação e onde o resultado aparece. Se um campo de seleção aparecer junto de um botão com o mesmo texto do valor atual, é o mesmo controle (lista suspensa personalizada): descreva-o uma única vez. Diga que o preenchimento é feito pelo teclado, usando a tecla Tab para chegar ao campo. Quarto, e só no final: se for útil, cite até 3 opções da lista de "Links navegáveis disponíveis" abaixo, dizendo que ela pode dizer "abrir" seguido do nome. Se for uma página de resultados de busca (como Google), em vez disso indique os sites dos resultados principais para o comando "abrir" e NUNCA recomende abas do próprio buscador (como Modo IA, Imagens, Shopping ou Vídeos). Por padrão, seja objetivo, em até 8 frases curtas. Não use numeração na resposta; fale de forma natural. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
+        'orientar' => 'Oriente uma pessoa cega sobre esta página, como se estivesse explicando pelo telefone. Siga esta ordem de prioridade. Primeiro: se a instrução do usuário contiver uma pergunta ou dúvida (por exemplo, "existe o campo para converter real para euro?"), responda a ela logo no início, de forma direta: diga se o elemento existe, qual o nome dele e como usá-lo. Quando for uma lista de opções, confira a lista completa de opções do campo antes de afirmar que uma opção existe ou não. Ignore a palavra "orientar" ou "ajuda" na fala, ela é só o comando. Segundo: explique em uma frase a finalidade da página e o estado atual dela, citando valores e resultados reais exibidos no conteúdo, como um resultado de cálculo já mostrado. Terceiro: se a página tiver formulário ou ferramenta, descreva os campos na ordem de uso, com o nome de cada um (use o rótulo), o tipo (campo de texto, lista de seleção, caixa de marcação, etc.), o valor atual quando houver, até o botão que executa a ação e onde o resultado aparece. Se um campo de seleção aparecer junto de um botão com o mesmo texto do valor atual, é o mesmo controle (lista suspensa personalizada): descreva-o uma única vez. Diga que o preenchimento é feito pelo teclado, usando a tecla Tab para chegar ao campo. Quarto: NÃO cite nomes de links, sites ou opções no texto nem explique como abrir; a lista numerada de opções será anunciada separadamente pelo sistema. Em vez disso, na ÚLTIMA linha da resposta escreva exatamente "OPCOES: " seguido dos números (separados por vírgula, no máximo 3) dos itens da lista "Links navegáveis disponíveis" mais úteis para abrir, ou "OPCOES: nenhuma". Se for uma página de resultados de busca (como Google), escolha os sites dos resultados principais e NUNCA abas do próprio buscador (como Modo IA, Imagens, Shopping ou Vídeos). Por padrão, seja objetivo, em até 8 frases curtas. Não use numeração na resposta; fale de forma natural. Se o usuário tiver pedido explicitamente mais detalhes, descreva cada elemento com mais profundidade. Nunca corte a resposta no meio — sempre conclua o pensamento.',
 
         'buscar' => 'O usuário fez uma busca por voz e os trechos dos resultados estão abaixo. Responda a dúvida do usuário em NO MÁXIMO 2 frases diretas, com base nesses trechos. NÃO cite nomes de sites, empresas, portais, títulos dos resultados nem números de opção, e NÃO explique como abrir links: a lista de opções e as instruções serão anunciadas separadamente pelo sistema logo após a sua resposta. Se os trechos não forem suficientes, diga isso em uma frase curta.',
     ];
@@ -122,9 +122,9 @@ PROMPT;
         $linksContext = '';
         if (in_array($command, ['resumir', 'orientar'], true) && !empty($pageLinks)) {
             $topLinks = array_slice($pageLinks, 0, 25);
-            $linksContext = "Links navegáveis disponíveis para o comando \"abrir\" (ao sugerir opções para o usuário abrir, escolha entre estas opções para que o comando de voz funcione exatamente):\n";
-            foreach ($topLinks as $link) {
-                $linksContext .= "- {$link['text']}\n";
+            $linksContext = "Links navegáveis disponíveis (numerados; indique apenas os números na linha final OPCOES):\n";
+            foreach ($topLinks as $i => $link) {
+                $linksContext .= '[' . ($i + 1) . "] {$link['text']}\n";
             }
             $linksContext .= "\n";
         }
@@ -267,10 +267,49 @@ PROMPT;
             $text = $this->speechFormatter->buildSpeech($text, $searchSources);
         }
 
+        // Resumir/Orientar: o Gemini só escolhe os números dos links; a lista falada é montada por código,
+        // exatamente como no buscar, para o usuário usar "abrir opção N".
+        if (in_array($command, ['resumir', 'orientar'], true)) {
+            [$text, $indices] = $this->extractOptionIndices($text);
+            if (!empty($pageLinks) && !empty($indices)) {
+                $topLinks = array_slice($pageLinks, 0, 25);
+                $chosen = [];
+                foreach ($indices as $idx) {
+                    if (isset($topLinks[$idx - 1])) {
+                        $chosen[] = [
+                            'title' => $topLinks[$idx - 1]['text'],
+                            'url'   => $topLinks[$idx - 1]['url'],
+                        ];
+                    }
+                }
+                if (!empty($chosen)) {
+                    $searchSources = $this->speechFormatter->buildSources($chosen);
+                    $text = $this->speechFormatter->buildSpeech($text, $searchSources, 'Opções para abrir nesta página:');
+                }
+            }
+        }
+
         return [
             'text'           => $text,
             'search_sources' => $searchSources,
         ];
+    }
+
+    /**
+     * Remove a linha "OPCOES: 2, 5" do texto e devolve os índices (1-based, únicos, máx. 5).
+     *
+     * @return array{0: string, 1: int[]}
+     */
+    protected function extractOptionIndices(string $text): array
+    {
+        $indices = [];
+        if (preg_match('/^\s*OP[CÇ][OÕ]ES\s*:\s*(.*)$/imu', $text, $m)) {
+            preg_match_all('/\d+/', $m[1], $nums);
+            $indices = array_slice(array_values(array_unique(array_map('intval', $nums[0]))), 0, 5);
+        }
+        $text = trim(preg_replace('/^\s*OP[CÇ][OÕ]ES\s*:.*$/imu', '', $text) ?? $text);
+
+        return [$text, $indices];
     }
 
     /**

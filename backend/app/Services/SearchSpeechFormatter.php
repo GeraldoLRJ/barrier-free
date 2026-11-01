@@ -61,14 +61,14 @@ class SearchSpeechFormatter
      *
      * @param array<int, array{number: int, site_name: string, spoken_title: string}> $sources
      */
-    public function buildSpeech(string $answer, array $sources): string
+    public function buildSpeech(string $answer, array $sources, ?string $intro = null): string
     {
         $total = count($sources);
         if ($total === 0) {
             return trim($answer);
         }
 
-        $lines = [$total === 1 ? 'Encontrei 1 opção.' : "Encontrei {$total} opções."];
+        $lines = [$intro ?? ($total === 1 ? 'Encontrei 1 opção.' : "Encontrei {$total} opções.")];
         foreach ($sources as $source) {
             $lines[] = "Opção {$source['number']}: " . $this->describe($source) . '.';
         }
