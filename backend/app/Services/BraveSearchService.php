@@ -65,6 +65,9 @@ class BraveSearchService
             ];
         }
 
+        // Remove resultados com URL maliciosa (Google Safe Browsing)
+        $formatted = app(SafeBrowsingService::class)->filterSafe($formatted);
+
         Log::info('Brave Search: resultados obtidos', [
             'query'   => $query,
             'count'   => count($formatted),

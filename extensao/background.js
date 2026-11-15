@@ -171,7 +171,8 @@ function matchSourceBySite(cmd, sources) {
             ...normalizeSpeech(source.site_name || '').replace(/[^\w\s]/g, ' ').split(/\s+/).filter(t => t.length >= 2),
             ...hostTokens
         ]);
-        if (spokenWords.some(w => siteTokens.has(w))) {
+        // Todas as palavras ditas devem pertencer ao site (ex.: "valor do dólar" não pode casar com valor.globo.com só por "valor")
+        if (spokenWords.every(w => siteTokens.has(w))) {
             candidates.push({ text: `${source.site_name || ''} ${source.title || ''}`.trim(), url: source.url, source, number: i + 1 });
         }
     });
@@ -181,7 +182,29 @@ function matchSourceBySite(cmd, sources) {
     return findBestPageLink(cmd, candidates, null) || candidates[0];
 }
 
+async function isUrlSafe(url) {
+    try {
+        const response = await fetch('http://localhost:8000/api/check-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        if (!response.ok) return true; // falha da API: não bloqueia (fallback)
+        const data = await response.json();
+        return data.safe !== false;
+    } catch (e) {
+        console.warn('Falha ao verificar URL no Safe Browsing:', e);
+        return true;
+    }
+}
+
 async function navigateToUrl(url, asNewTab = false, successMessage = null, aiResponse = null) {
+    if (!(await isUrlSafe(url))) {
+        const msg = 'Por segurança, não abri este site porque ele foi identificado como potencialmente perigoso.';
+        safeSendMessage({ action: "processResult", success: false, message: msg, ai_response: msg });
+        return;
+    }
+
     let tabs = await chrome.tabs.query({ active: true, windowType: 'normal' });
     if (tabs.length > 0) {
         let tab = tabs[0];
@@ -350,33 +373,103 @@ function extractTargetClause(cmd) {
 
 // --- Extrai uma URL navegável a partir do texto falado pelo usuário (apenas sites conhecidos ou domínios explícitos) ---
 function extractUrlFromSpeech(cmd) {
-    // Sites mais comuns mapeados por nome coloquial
+    // Sites mais visitados no Brasil segundo o ranking Top 50 da Similarweb:
+    // Fonte: https://www.similarweb.com/pt/top-websites/brazil/
+    // (Excluídos exclusivamente os domínios de conteúdo adulto e de apostas/cassino presentes no Top 50)
     const KNOWN_SITES = {
+        // #1 google.com / #31 google.com.br
+        'google': 'https://www.google.com',
+        'google brasil': 'https://www.google.com.br',
+        // #2 youtube.com
         'youtube': 'https://www.youtube.com',
-        'google': 'https://www.google.com.br',
-        'gmail': 'https://mail.google.com',
-        'facebook': 'https://www.facebook.com',
+        // #3 tiktok.com
+        'tiktok': 'https://www.tiktok.com',
+        'tik tok': 'https://www.tiktok.com',
+        // #5 globo.com
+        'globo': 'https://www.globo.com',
+        // #6 whatsapp.com
+        'whatsapp': 'https://www.whatsapp.com',
+        // #7 instagram.com
         'instagram': 'https://www.instagram.com',
-        'twitter': 'https://www.twitter.com',
-        'x': 'https://www.x.com',
-        'whatsapp': 'https://web.whatsapp.com',
-        'amazon': 'https://www.amazon.com.br',
+        // #8 chatgpt.com
+        'chatgpt': 'https://chatgpt.com',
+        'chat gpt': 'https://chatgpt.com',
+        // #9 mercadolivre.com.br
         'mercado livre': 'https://www.mercadolivre.com.br',
         'mercadolivre': 'https://www.mercadolivre.com.br',
-        'wikipedia': 'https://pt.wikipedia.org',
-        'netflix': 'https://www.netflix.com',
-        'spotify': 'https://open.spotify.com',
-        'linkedin': 'https://www.linkedin.com',
-        'github': 'https://www.github.com',
-        'globo': 'https://www.globo.com',
-        'g1': 'https://g1.globo.com',
-        'uol economia': 'https://economia.uol.com.br',
+        // #10 facebook.com
+        'facebook': 'https://www.facebook.com',
+        // #11 uol.com.br
         'uol': 'https://www.uol.com.br',
-        'terra': 'https://www.terra.com.br',
-        'nubank': 'https://www.nubank.com.br',
-        'wise': 'https://wise.com/br',
-        'banco central do brasil': 'https://www.bcb.gov.br',
-        'banco central': 'https://www.bcb.gov.br',
+        // #12 amazon.com.br
+        'amazon': 'https://www.amazon.com.br',
+        // #13 acesso.gov.br
+        'acesso gov': 'https://acesso.gov.br',
+        'acesso gov br': 'https://acesso.gov.br',
+        // #14 shopee.com.br
+        'shopee': 'https://shopee.com.br',
+        // #15 x.com
+        'x': 'https://x.com',
+        'twitter': 'https://x.com',
+        // #16 bing.com
+        'bing': 'https://www.bing.com',
+        // #17 kwai.com
+        'kwai': 'https://www.kwai.com',
+        // #18 gemini.google.com
+        'gemini': 'https://gemini.google.com',
+        // #19 temu.com
+        'temu': 'https://www.temu.com',
+        // #22 live.com
+        'live': 'https://www.live.com',
+        'outlook': 'https://www.live.com',
+        'hotmail': 'https://www.live.com',
+        // #23 wikipedia.org
+        'wikipedia': 'https://pt.wikipedia.org',
+        // #24 gov.br
+        'gov br': 'https://www.gov.br',
+        'governo federal': 'https://www.gov.br',
+        // #25 shop.tiktok.com
+        'tiktok shop': 'https://shop.tiktok.com',
+        'tik tok shop': 'https://shop.tiktok.com',
+        // #26 sp.gov.br
+        'sp gov': 'https://www.sp.gov.br',
+        'sp gov br': 'https://www.sp.gov.br',
+        'governo de sao paulo': 'https://www.sp.gov.br',
+        // #27 pinterest.com
+        'pinterest': 'https://www.pinterest.com',
+        // #28 linkedin.com
+        'linkedin': 'https://www.linkedin.com',
+        // #29 spotify.com
+        'spotify': 'https://open.spotify.com',
+        // #30 samsung.com
+        'samsung': 'https://www.samsung.com',
+        // #32 olx.com.br
+        'olx': 'https://www.olx.com.br',
+        // #33 cloud.microsoft
+        'cloud microsoft': 'https://cloud.microsoft',
+        'microsoft cloud': 'https://cloud.microsoft',
+        // #34 netflix.com
+        'netflix': 'https://www.netflix.com',
+        // #35 cnnbrasil.com.br
+        'cnn brasil': 'https://www.cnnbrasil.com.br',
+        'cnn': 'https://www.cnnbrasil.com.br',
+        // #36 canva.com
+        'canva': 'https://www.canva.com',
+        // #37 t.me
+        'telegram': 'https://t.me',
+        // #42 adobe.com
+        'adobe': 'https://www.adobe.com',
+        // #44 microsoft.com
+        'microsoft': 'https://www.microsoft.com',
+        // #45 abril.com.br
+        'abril': 'https://abril.com.br',
+        // #46 reddit.com
+        'reddit': 'https://www.reddit.com',
+        // #48 caixa.gov.br
+        'caixa': 'https://www.caixa.gov.br',
+        'caixa economica': 'https://www.caixa.gov.br',
+        // #49 yahoo.com
+        'yahoo': 'https://www.yahoo.com',
     };
 
     const targetClause = extractTargetClause(cmd);
@@ -691,8 +784,8 @@ function openVoiceWindow() {
         chrome.windows.create({
             url: 'voice.html',
             type: 'popup',
-            width: 600,
-            height: 400
+            width: 750,
+            height: 600
         }, (win) => {
             voiceWindowId = win.id;
             chrome.storage.local.set({ isVoiceEnabled: true });

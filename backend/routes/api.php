@@ -15,3 +15,11 @@ use App\Http\Controllers\Api\DomProcessController;
 */
 
 Route::post('/process-dom', DomProcessController::class);
+
+Route::post('/check-url', function (\Illuminate\Http\Request $request) {
+    $data = $request->validate(['url' => ['required', 'url', 'max:2048']]);
+
+    return response()->json([
+        'safe' => app(\App\Services\SafeBrowsingService::class)->isSafe($data['url']),
+    ]);
+});

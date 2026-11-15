@@ -4,14 +4,17 @@ namespace App\Actions;
 
 use App\Services\GeminiService;
 use App\Services\DomLinkExtractorService;
+use App\Services\SafeBrowsingService;
 
 class ProcessDomAction
 {
     protected GeminiService $geminiService;
     protected DomLinkExtractorService $linkExtractor;
+    protected SafeBrowsingService $safeBrowsing;
 
-    public function __construct(GeminiService $geminiService, DomLinkExtractorService $linkExtractor)
+    public function __construct(GeminiService $geminiService, DomLinkExtractorService $linkExtractor, SafeBrowsingService $safeBrowsing)
     {
+        $this->safeBrowsing = $safeBrowsing;
         $this->geminiService = $geminiService;
         $this->linkExtractor = $linkExtractor;
     }
@@ -31,6 +34,7 @@ class ProcessDomAction
             $pageLinks = null;
             if (in_array($command, ['resumir', 'orientar']) && !empty($htmlContent) && !empty($url)) {
                 $pageLinks = $this->linkExtractor->extract($htmlContent, $url);
+                $pageLinks = $this->safeBrowsing->filterSafe($pageLinks);
             }
 
             $aiResult = $this->geminiService->analyze($htmlContent, $command, $url, $userPrompt, $pageLinks);
